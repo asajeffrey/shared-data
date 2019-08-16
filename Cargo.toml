@@ -1,0 +1,11 @@
+[package]
+name = "sharing-is-caring"
+version = "0.1.0"
+authors = ["Alan Jeffrey <ajeffrey@mozilla.com>"]
+edition = "2018"
+
+[dependencies]
+shared_memory = "0.8"
+context-allocator = "0.2"
+rand = "0.7"
+
