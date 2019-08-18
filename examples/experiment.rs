@@ -11,6 +11,7 @@ use shared_memory::Timeout;
 use std::error::Error;
 use std::sync::atomic::AtomicIsize;
 use std::sync::atomic::Ordering;
+use std::time::Instant;
 
 enum Foo {
     A(Bar),
@@ -144,21 +145,28 @@ impl<T> Receiver<T> {
     }
 }
 
+const ITERATIONS: usize = 1_000_000;
+
 fn server() -> Result<(), Box<dyn Error>> {
     let shmem = SharedMemConf::new()
         .set_size(1024 * 1024)
 	.add_event(EventType::Auto)?
 	.create()?;
-    println!("Created shmem at {}, with {} events", shmem.get_os_path(), shmem.num_events());
+    println!("Created shmem at {}", shmem.get_os_path());
     let mut receiver = unsafe { Receiver::from_shmem(shmem) };
     let mut total = 0.0;
-    loop {
+    receiver.peek();
+    let start = Instant::now();
+    for _ in 0..ITERATIONS {
         if let Foo::A(Bar::A(x)) = receiver.peek() {
 	   total += x;
-	   println!("total = {}", total);
 	}
         receiver.recv();
     }
+    let elapsed = Instant::now() - start;
+    println!("Took {:?}", elapsed);
+    println!("Total = {}", total);
+    Ok(())
 }
 
 fn client(name: &str) -> Result<(), Box<dyn Error>> {
@@ -166,14 +174,16 @@ fn client(name: &str) -> Result<(), Box<dyn Error>> {
     println!("Using shmem at {}", shmem.get_os_path());
     let mut sender = unsafe { Sender::from_shmem(shmem) };
     let mut total = 0.0;
-    loop {
+    sender.try_send(Foo::B(0));
+    for _ in 0..ITERATIONS {
         let data = rand::random();
         if let Foo::A(Bar::A(x)) = data {
 	   total += x;
-	   println!("total = {}", total);
 	}
 	sender.try_send(data);
     }
+    println!("Total = {}", total);
+    Ok(())
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
