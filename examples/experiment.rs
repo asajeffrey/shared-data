@@ -13,11 +13,18 @@ use std::sync::atomic::AtomicIsize;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
+#[cfg(feature="ipc")]
+use ipc_channel::ipc;
+#[cfg(feature="ipc")]
+use serde::{de, ser, Serialize, Deserialize};
+
+#[cfg_attr(feature = "ipc", derive(Serialize, Deserialize))]
 enum Foo {
     A(Bar),
     B(u32),
 }
 
+#[cfg_attr(feature = "ipc", derive(Serialize, Deserialize))]
 enum Bar {
     A(f64),
     B(u32),
@@ -68,7 +75,7 @@ impl<T> Sender<T> {
 	    condvar,
 	}
     }
-    fn try_send(&mut self, data: T) {
+    fn send(&mut self, data: T) {
         let size = unsafe { &*self.size }.fetch_add(1, Ordering::SeqCst);
 	if size >= self.capacity {
 	   // The buffer is full, give up
@@ -147,48 +154,73 @@ impl<T> Receiver<T> {
 
 const ITERATIONS: usize = 1_000_000;
 
-fn server() -> Result<(), Box<dyn Error>> {
-    let shmem = SharedMemConf::new()
-        .set_size(1024 * 1024)
-	.add_event(EventType::Auto)?
-	.create()?;
-    println!("Created shmem at {}", shmem.get_os_path());
-    let mut receiver = unsafe { Receiver::from_shmem(shmem) };
+fn server() {
+    #[cfg(not(feature = "ipc"))]
+    let mut receiver = {
+        let shmem = SharedMemConf::new()
+            .set_size(1024 * 1024)
+	    .add_event(EventType::Auto).unwrap()
+	    .create().unwrap();
+        println!("Created shmem at {}", shmem.get_os_path());
+        let mut receiver = unsafe { Receiver::from_shmem(shmem) };
+        receiver.peek();
+	receiver
+    };
+    #[cfg(feature = "ipc")]
+    let receiver: ipc::IpcReceiver<Foo> = {
+        let (server, name) = ipc::IpcOneShotServer::new().unwrap();
+        println!("Created ipc at {}", name);
+	let (_, receiver) = server.accept().unwrap();
+        receiver
+    };
     let mut total = 0.0;
-    receiver.peek();
     let start = Instant::now();
     for _ in 0..ITERATIONS {
-        if let Foo::A(Bar::A(x)) = receiver.peek() {
+        #[cfg(not(feature = "ipc"))]
+        let msg = receiver.peek();
+        #[cfg(feature = "ipc")]
+        let msg = receiver.recv().unwrap();
+        if let Foo::A(Bar::A(x)) = msg {
 	   total += x;
 	}
+        #[cfg(not(feature = "ipc"))]
         receiver.recv();
     }
     let elapsed = Instant::now() - start;
     println!("Took {:?}", elapsed);
     println!("Total = {}", total);
-    Ok(())
 }
 
-fn client(name: &str) -> Result<(), Box<dyn Error>> {
-    let shmem = SharedMem::open(name)?;
-    println!("Using shmem at {}", shmem.get_os_path());
-    let mut sender = unsafe { Sender::from_shmem(shmem) };
+fn client(name: String) {
+    #[cfg(not(feature = "ipc"))]
+    let mut sender = {
+        let shmem = SharedMem::open(&name).unwrap();
+        println!("Using shmem at {}", shmem.get_os_path());
+        let mut sender = unsafe { Sender::from_shmem(shmem) };
+        sender.send(Foo::B(0));
+	sender
+    };
+    #[cfg(feature = "ipc")]
+    let sender: ipc::IpcSender<Foo> = {
+        let server = ipc::IpcSender::connect(name).unwrap();
+	let (sender, receiver) = ipc::channel().unwrap();
+	let _ = server.send(receiver);
+        sender
+    };
     let mut total = 0.0;
-    sender.try_send(Foo::B(0));
     for _ in 0..ITERATIONS {
         let data = rand::random();
         if let Foo::A(Bar::A(x)) = data {
 	   total += x;
 	}
-	sender.try_send(data);
+	let _ = sender.send(data);
     }
     println!("Total = {}", total);
-    Ok(())
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
+fn main() {
     if let Some(arg) = std::env::args().skip(1).next() {
-        client(&arg)
+        client(arg)
     } else {
         server()
     }
