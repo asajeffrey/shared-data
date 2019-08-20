@@ -1,3 +1,4 @@
+use arrayvec::ArrayString;
 use lazy_static::lazy_static;
 use shared_memory::SharedMem;
 use shared_memory::SharedMemCast;
@@ -286,14 +287,16 @@ impl std::ops::Add for ObjectOffset {
 #[derive(Clone, Copy, Eq, Debug, PartialEq)]
 struct ShmemId(u16);
 
-struct ShmemName([u8; 16]);
+struct ShmemName(ArrayString<[u8; 16]>);
 
 impl ShmemName {
     fn from_str(name: &str) -> Option<Self> {
-        unimplemented!()
+        let name = ArrayString::from(name).ok()?;
+        Some(ShmemName(name))
     }
+
     fn as_str(&self) -> &str {
-        unimplemented!()
+        self.0.as_str()
     }
 }
 
