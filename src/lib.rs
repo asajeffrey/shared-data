@@ -89,7 +89,7 @@ impl ShmemAllocator {
                     }
                 }
             }
-               let new_shmem_size = usize::max(size, old_size * 2);
+            let new_shmem_size = usize::max(size, old_size * 2);
             let new_shmem_id = self.alloc_shmem(new_shmem_size)?;
             let result = SharedAddress::new(new_shmem_id, object_size, ObjectOffset(0));
             let new_unused = Some(SharedAddress::new(new_shmem_id, object_size, object_size.as_offset()));
