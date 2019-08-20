@@ -1,3 +1,4 @@
+use lazy_static::lazy_static;
 use shared_memory::SharedMem;
 use shared_memory::SharedMemCast;
 use shared_memory::LockType;
@@ -6,6 +7,7 @@ use std::num::NonZeroU64;
 use std::mem;
 use std::ptr;
 use std::ptr::NonNull;
+use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::AtomicU64;
@@ -29,6 +31,9 @@ struct ShmemAllocator {
     shmems: *mut AtomicPtr<SharedMem>,
     unused: *mut AtomicSharedAddress,
 }
+
+unsafe impl Sync for ShmemAllocator {}
+unsafe impl Send for ShmemAllocator {}
 
 impl ShmemAllocator {
     unsafe fn from_shmem(shmem: SharedMem) -> ShmemAllocator {
@@ -237,3 +242,15 @@ impl ShmemName {
 }
 
 struct Offset(u32);
+
+lazy_static! {
+   static ref ALLOCATOR_NAME: RwLock<Option<String>> = RwLock::new(None);
+   static ref ALLOCATOR: ShmemAllocator = {
+       let name = ALLOCATOR_NAME.read().expect("Failed to lock");
+       if let Some(ref name) = *name {
+           ShmemAllocator::open(&*name).expect(&format!("Failed to open shared memory {}.", name))
+       } else {
+           ShmemAllocator::create().expect("Failed to create shared memory")
+       }
+   };
+}
