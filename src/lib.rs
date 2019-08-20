@@ -15,6 +15,12 @@ use std::sync::atomic::Ordering;
 const MAX_SHMEMS: usize = 10_000;
 const MIN_OBJECT_SIZE: usize = 8;
 
+struct ShmemMetadata {
+    num_shmems: AtomicUsize,
+    shmem_free: [AtomicBool; MAX_SHMEMS],
+    shmem_names: [ShmemName; MAX_SHMEMS],
+}
+
 struct ShmemAllocator {
     shmem: SharedMem,
     num_shmems: *mut AtomicUsize,
@@ -25,6 +31,22 @@ struct ShmemAllocator {
 }
 
 impl ShmemAllocator {
+    unsafe fn from_shmem(shmem: SharedMem) -> ShmemAllocator {
+        unimplemented!()
+    }
+
+    fn create() -> Option<ShmemAllocator> {
+        let size = mem::size_of::<ShmemMetadata>();
+        let shmem = SharedMem::create(LockType::RwLock, size).ok()?;
+        unsafe { shmem.get_ptr().write_bytes(0, size) };
+        Some(unsafe { ShmemAllocator::from_shmem(shmem) })
+    }
+
+    fn open(name: &str) -> Option<ShmemAllocator> {
+        let shmem = SharedMem::open(name).ok()?;
+        Some(unsafe { ShmemAllocator::from_shmem(shmem) })
+    }
+
     fn get_num_shmems(&self) -> usize {
         unsafe { &*self.num_shmems }.load(Ordering::SeqCst)
     }
