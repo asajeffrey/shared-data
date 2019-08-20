@@ -10,7 +10,6 @@ use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::Ordering;
 
 const MAX_SHMEMS: usize = 10_000;
-const SHMEM_SIZE: usize = 1_000_000;
 
 struct ShmemAllocator {
     shmem: SharedMem,
@@ -51,8 +50,8 @@ impl ShmemAllocator {
         Some(&*new_shmem_ptr)
     }
 
-    unsafe fn alloc_shmem(&self) -> Option<ShmemId> {
-        let mut shmem = Box::new(SharedMem::create(LockType::RwLock, SHMEM_SIZE).ok()?);
+    unsafe fn alloc_shmem(&self, size: usize) -> Option<ShmemId> {
+        let mut shmem = Box::new(SharedMem::create(LockType::RwLock, size).ok()?);
         let shmem_ptr = &mut *shmem as *mut _;
         let shmem_name = ShmemName::from_str(shmem.get_os_path())?;
         let mut index = (&*self.num_shmems).load(Ordering::Relaxed);
