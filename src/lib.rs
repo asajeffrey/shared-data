@@ -281,8 +281,8 @@ impl<T> SharedBox<T> {
     pub fn new(data: T) -> SharedBox<T> {
         let size = mem::size_of::<T>();
         let address = unsafe { ALLOCATOR.alloc_bytes(size) }.expect("Failed to allocate shared box");
-	let marker = PhantomData;
-	SharedBox { address, marker }
+        let marker = PhantomData;
+        SharedBox { address, marker }
     }
 
     pub fn as_ptr(&self) -> Option<NonNull<T>> {
@@ -297,7 +297,7 @@ impl<T> Drop for SharedBox<T> {
             if let Some(ptr) = self.as_ptr() {
                 ptr.as_ptr().read();
             }
-	    ALLOCATOR.free_bytes(self.address);
+            ALLOCATOR.free_bytes(self.address);
         }
     }
 }
