@@ -38,7 +38,13 @@ unsafe impl Send for ShmemAllocator {}
 
 impl ShmemAllocator {
     unsafe fn from_shmem(shmem: SharedMem) -> ShmemAllocator {
-        unimplemented!()
+        let metadata = shmem.get_ptr() as *mut ShmemMetadata;
+        let num_shmems = &mut (*metadata).num_shmems;
+        let shmem_free = &mut (*metadata).shmem_free[0];
+        let shmem_names = &mut (*metadata).shmem_names[0];
+        let shmems = Box::into_raw(Box::new(Default::default()));
+        let unused = Box::into_raw(Box::new(Default::default()));
+        ShmemAllocator { shmem, num_shmems, shmem_free, shmem_names, shmems, unused }
     }
 
     fn create() -> Option<ShmemAllocator> {
@@ -186,6 +192,7 @@ impl SharedAddress {
 
 unsafe impl SharedMemCast for SharedAddress {}
 
+#[derive(Default)]
 struct AtomicSharedAddress(AtomicU64);
 
 impl AtomicSharedAddress {
