@@ -4,6 +4,7 @@ use shared_memory::SharedMemCast;
 use shared_memory::LockType;
 use std::num::NonZeroU8;
 use std::num::NonZeroU64;
+use std::marker::PhantomData;
 use std::mem;
 use std::ptr;
 use std::ptr::NonNull;
@@ -101,6 +102,14 @@ impl ShmemAllocator {
 
     unsafe fn free_shmem(&self, shmem_id: ShmemId) {
         // TODO
+    }
+
+    fn get_bytes(&self, address: SharedAddress) -> Option<NonNull<u8>> {
+        let shmem = unsafe { self.get_shmem(address.shmem_id()) }?;
+        let shmem_ptr = NonNull::new(shmem.get_ptr() as *mut u8)?.as_ptr();
+        let object_offset = address.object_offset().as_isize();
+        let object_ptr = unsafe { shmem_ptr.offset(object_offset) };
+        NonNull::new(object_ptr)
     }
 
     unsafe fn alloc_bytes(&self, size: usize) -> Option<SharedAddress> {
@@ -217,6 +226,10 @@ struct ObjectOffset(u32);
 impl ObjectOffset {
     fn as_usize(self) -> usize {
         self.0 as usize
+    }
+
+    fn as_isize(self) -> isize {
+        self.0 as isize
     }
 }
 
