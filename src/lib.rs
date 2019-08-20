@@ -1,18 +1,24 @@
 #![feature(allocator_api)]
 
 use shared_memory::SharedMem;
+use shared_memory::LockType;
 use std::alloc::AllocErr;
 use std::num::NonZeroUsize;
 use std::mem;
 use std::ptr;
 use std::ptr::NonNull;
+use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::Ordering;
 
+const MAX_SHMEMS: usize = 10_000;
+const SHMEM_SIZE: usize = 1_000_000;
+
 struct ShmemAllocator {
     shmem: SharedMem,
     num_shmems: *mut AtomicUsize,
+    shmem_free: *mut AtomicBool,
     shmem_names: *mut ShmemName,
     shmems: *mut AtomicPtr<SharedMem>,
 
@@ -47,6 +53,26 @@ impl ShmemAllocator {
         mem::forget(new_shmem);
         Some(&*new_shmem_ptr)
     }
+
+    unsafe fn alloc_shmem(&self) -> Option<ShmemId> {
+        let mut shmem = Box::new(SharedMem::create(LockType::RwLock, SHMEM_SIZE).ok()?);
+        let shmem_ptr = &mut *shmem as *mut _;
+        let shmem_name = ShmemName::from_str(shmem.get_os_path())?;
+        let mut index = (&*self.num_shmems).load(Ordering::Relaxed);
+        while (&*self.shmem_free.offset(index as isize)).swap(true, Ordering::SeqCst) {
+            if MAX_SHMEMS <= index {
+                return None;
+            } else {
+                index += 1;
+            }
+        }
+        *self.shmem_names.offset(index as isize) = shmem_name;
+        if (&*self.shmems.offset(index as isize)).compare_and_swap(ptr::null_mut(), shmem_ptr, Ordering::SeqCst).is_null() {
+            mem::forget(shmem);
+        }
+        (&*self.num_shmems).fetch_add(1, Ordering::SeqCst);
+        Some(ShmemId(index as u32))
+    }
 }
 
 struct SharedAddress(NonZeroUsize);
@@ -56,6 +82,9 @@ struct ShmemId(u32);
 struct ShmemName([u8; 16]);
 
 impl ShmemName {
+    fn from_str(name: &str) -> Option<Self> {
+        unimplemented!()
+    }
     fn as_str(&self) -> &str {
         unimplemented!()
     }
