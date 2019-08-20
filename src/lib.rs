@@ -149,40 +149,70 @@ impl ShmemAllocator {
     }
 }
 
+#[repr(C)]
+#[derive(Clone, Copy, Eq, Debug, PartialEq)]
+struct RawSharedAddress {
+    shmem_id: u16,
+    object_size: u8,
+    padding: u8,
+    object_offset: u32,
+}
+
+impl RawSharedAddress {
+    fn from_u64(bits: u64) -> RawSharedAddress {
+        unsafe { mem::transmute(bits) }
+    }
+
+    fn to_u64(self) -> u64 {
+        unsafe { mem::transmute(self) }
+    }
+
+    fn is_valid(self) -> bool {
+        (self.object_size != 0) && (self.padding == 0)
+    }
+}
+
 #[derive(Clone, Copy, Eq, Debug, PartialEq)]
 struct SharedAddress(NonZeroU64);
 
 impl SharedAddress {
-    unsafe fn from_u64_unchecked(data: u64) -> SharedAddress {
-        SharedAddress(NonZeroU64::new_unchecked(data))
+    unsafe fn from_raw_unchecked(raw: RawSharedAddress) -> SharedAddress {
+        SharedAddress(NonZeroU64::new_unchecked(raw.to_u64()))
     }
 
-    fn from_u64(data: u64) -> Option<SharedAddress> {
-        if SharedAddress::valid(data) {
-           Some(unsafe { SharedAddress::from_u64_unchecked(data) })
+    fn from_raw(raw: RawSharedAddress) -> Option<SharedAddress> {
+        if raw.is_valid() {
+            Some(unsafe { SharedAddress::from_raw_unchecked(raw) })
         } else {
-           None
+            None
         }
     }
 
+    fn as_raw(self) -> RawSharedAddress {
+        RawSharedAddress::from_u64(self.0.get())
+    }
+
     fn new(shmem_id: ShmemId, size: ObjectSize, offset: ObjectOffset) -> SharedAddress {
-        unsafe { SharedAddress::from_u64_unchecked(((shmem_id.0 as u64) << 48) | ((size.0.get() as u64) << 40) | (offset.0 as u64)) }
+        unsafe {
+            SharedAddress::from_raw_unchecked(RawSharedAddress {
+                shmem_id: shmem_id.0,
+                object_size: size.0.get(),
+                padding: 0,
+                object_offset: offset.0,
+            })
+        }
     }
 
-    fn valid(data: u64) -> bool {
-        ((data >> 40) as u8 != 0) && ((data >> 32) as u8 == 0)
-    }
-
-    fn shmem_id(&self) -> ShmemId {
-        ShmemId((self.0.get() >> 48) as u16)
+    fn shmem_id(self) -> ShmemId {
+        ShmemId(self.as_raw().shmem_id)
     }
 
     fn object_size(&self) -> ObjectSize {
-        ObjectSize(unsafe { NonZeroU8::new_unchecked((self.0.get() >> 40) as u8) })
+        ObjectSize(unsafe { NonZeroU8::new_unchecked(self.as_raw().object_size) })
     }
 
     fn object_offset(&self) -> ObjectOffset {
-        ObjectOffset(self.0.get() as u32)
+        ObjectOffset(self.as_raw().object_offset)
     }
 
     fn object_end(&self) -> ObjectOffset {
@@ -199,10 +229,12 @@ impl AtomicSharedAddress {
     fn compare_and_swap(&self, current: Option<SharedAddress>, new: Option<SharedAddress>, order: Ordering) -> Option<SharedAddress> {
         let current = current.map(|addr| addr.0.get()).unwrap_or(0);
         let new = new.map(|addr| addr.0.get()).unwrap_or(0);
-        SharedAddress::from_u64(self.0.compare_and_swap(current, new, order))
+        let bits = self.0.compare_and_swap(current, new, order);
+        SharedAddress::from_raw(RawSharedAddress::from_u64(bits))
     }
     fn fetch_add(&self, offset: ObjectOffset, order: Ordering) -> Option<SharedAddress> {
-        let result = SharedAddress::from_u64(self.0.fetch_add(offset.0 as u64, order));
+        let bits = self.0.fetch_add(offset.as_u64(), order);
+        let result = SharedAddress::from_raw(RawSharedAddress::from_u64(bits));
         if result.is_none() { self.0.fetch_sub(offset.0 as u64, order); }
         result
     }
@@ -231,6 +263,10 @@ impl ObjectSize {
 struct ObjectOffset(u32);
 
 impl ObjectOffset {
+    fn as_u64(self) -> u64 {
+        self.0 as u64
+    }
+
     fn as_usize(self) -> usize {
         self.0 as usize
     }
