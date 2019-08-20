@@ -101,6 +101,10 @@ impl ShmemAllocator {
             }
         }
     }
+
+    unsafe fn free_bytes(&self, addr: SharedAddress) {
+        // TODO
+    }
 }
 
 #[derive(Clone, Copy, Eq, Debug, PartialEq)]
