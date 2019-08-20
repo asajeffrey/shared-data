@@ -267,3 +267,37 @@ lazy_static! {
        }
    };
 }
+
+pub struct SharedBox<T> {
+    address: SharedAddress,
+    marker: PhantomData<T>,
+}
+
+unsafe impl<T: SharedMemCast> SharedMemCast for SharedBox<T> {}
+unsafe impl<T: Sync> Sync for SharedBox<T> {}
+unsafe impl<T: Send> Send for SharedBox<T> {}
+
+impl<T> SharedBox<T> {
+    pub fn new(data: T) -> SharedBox<T> {
+        let size = mem::size_of::<T>();
+        let address = unsafe { ALLOCATOR.alloc_bytes(size) }.expect("Failed to allocate shared box");
+	let marker = PhantomData;
+	SharedBox { address, marker }
+    }
+
+    pub fn as_ptr(&self) -> Option<NonNull<T>> {
+        let ptr = ALLOCATOR.get_bytes(self.address)?;
+        Some(ptr.cast())
+    }
+}
+
+impl<T> Drop for SharedBox<T> {
+    fn drop(&mut self) {
+        unsafe {
+            if let Some(ptr) = self.as_ptr() {
+                ptr.as_ptr().read();
+            }
+	    ALLOCATOR.free_bytes(self.address);
+        }
+    }
+}
