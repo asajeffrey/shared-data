@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 use std::mem;
 use std::ptr;
 use std::ptr::NonNull;
-use std::sync::RwLock;
+use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::AtomicU64;
@@ -303,15 +303,20 @@ impl ShmemName {
 struct Offset(u32);
 
 lazy_static! {
-   static ref ALLOCATOR_NAME: RwLock<Option<String>> = RwLock::new(None);
+   static ref ALLOCATOR_NAME: Mutex<Option<String>> = Mutex::new(None);
    static ref ALLOCATOR: ShmemAllocator = {
-       let name = ALLOCATOR_NAME.read().expect("Failed to lock");
-       if let Some(ref name) = *name {
+       if let Some(name) = ALLOCATOR_NAME.lock().ok().and_then(|mut name| name.take()) {
            ShmemAllocator::open(&*name).expect(&format!("Failed to open shared memory {}.", name))
        } else {
            ShmemAllocator::create().expect("Failed to create shared memory")
        }
    };
+}
+
+pub fn bootstrap(name: String) {
+   if let Ok(mut allocator_name) = ALLOCATOR_NAME.lock() {
+       *allocator_name = Some(name);
+   }
 }
 
 pub struct SharedBox<T> {
