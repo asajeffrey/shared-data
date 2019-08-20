@@ -1,8 +1,5 @@
-#![feature(allocator_api)]
-
 use shared_memory::SharedMem;
 use shared_memory::LockType;
-use std::alloc::AllocErr;
 use std::num::NonZeroUsize;
 use std::mem;
 use std::ptr;
