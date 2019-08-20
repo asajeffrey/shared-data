@@ -1,4 +1,5 @@
 use shared_memory::SharedMem;
+use shared_memory::SharedMemCast;
 use shared_memory::LockType;
 use std::num::NonZeroU8;
 use std::num::NonZeroU64;
@@ -142,6 +143,8 @@ impl SharedAddress {
         self.object_offset() + self.object_size().as_offset()
     }
 }
+
+unsafe impl SharedMemCast for SharedAddress {}
 
 struct AtomicSharedAddress(AtomicU64);
 
