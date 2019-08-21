@@ -1,8 +1,8 @@
 use rand::distributions::Distribution;
 use rand::distributions::Standard;
 use rand::Rng;
-use shared_memory::EventState;
 use shared_memory::EventSet;
+use shared_memory::EventState;
 use shared_memory::EventType;
 use shared_memory::EventWait;
 use shared_memory::SharedMem;
@@ -13,10 +13,10 @@ use std::sync::atomic::AtomicIsize;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-#[cfg(feature="ipc")]
+#[cfg(feature = "ipc")]
 use ipc_channel::ipc;
-#[cfg(feature="ipc")]
-use serde::{de, ser, Serialize, Deserialize};
+#[cfg(feature = "ipc")]
+use serde::{de, ser, Deserialize, Serialize};
 
 #[cfg_attr(feature = "ipc", derive(Serialize, Deserialize))]
 enum Foo {
@@ -78,16 +78,18 @@ impl<T> Sender<T> {
     fn send(&mut self, data: T) {
         let size = unsafe { &*self.size }.fetch_add(1, Ordering::SeqCst);
         if size >= self.capacity {
-           // The buffer is full, give up
-           unsafe { &*self.size }.fetch_sub(1, Ordering::SeqCst);
-           return;
+            // The buffer is full, give up
+            unsafe { &*self.size }.fetch_sub(1, Ordering::SeqCst);
+            return;
         }
         let index = unsafe { &*self.finish }.fetch_add(1, Ordering::SeqCst) % self.capacity;
         if index == 0 {
-           // We overflowed, but the buffer is circular, so we just mod
-           unsafe { &*self.finish }.fetch_sub(self.capacity, Ordering::SeqCst);
+            // We overflowed, but the buffer is circular, so we just mod
+            unsafe { &*self.finish }.fetch_sub(self.capacity, Ordering::SeqCst);
         }
-        unsafe { self.base.offset(index).write(Some(data)); }
+        unsafe {
+            self.base.offset(index).write(Some(data));
+        }
         self.shmem.set(self.condvar, EventState::Signaled);
     }
 }
@@ -124,7 +126,7 @@ impl<T> Receiver<T> {
         }
     }
     fn try_recv(&mut self) -> Option<T> {
-        let result = unsafe { &mut*self.base.offset(self.start) }.take();
+        let result = unsafe { &mut *self.base.offset(self.start) }.take();
         if !result.is_none() {
             self.start = (self.start + 1) % self.capacity;
             unsafe { &*self.size }.fetch_sub(1, Ordering::SeqCst);
@@ -134,20 +136,24 @@ impl<T> Receiver<T> {
     fn recv(&mut self) -> T {
         loop {
             match self.try_recv() {
-                None => { let _ = self.shmem.wait(self.condvar, Timeout::Infinite); },
+                None => {
+                    let _ = self.shmem.wait(self.condvar, Timeout::Infinite);
+                }
                 Some(result) => return result,
-               }
+            }
         }
     }
     fn try_peek(&self) -> Option<&T> {
-        unsafe { &mut*self.base.offset(self.start) }.as_ref()
+        unsafe { &mut *self.base.offset(self.start) }.as_ref()
     }
     fn peek(&mut self) -> &T {
         loop {
-            match unsafe { &mut*self.base.offset(self.start) } {
-                None => { let _ = self.shmem.wait(self.condvar, Timeout::Infinite); },
+            match unsafe { &mut *self.base.offset(self.start) } {
+                None => {
+                    let _ = self.shmem.wait(self.condvar, Timeout::Infinite);
+                }
                 Some(ref result) => return result,
-               }
+            }
         }
     }
 }
@@ -159,8 +165,10 @@ fn server() {
     let mut receiver = {
         let shmem = SharedMemConf::new()
             .set_size(1024 * 1024)
-            .add_event(EventType::Auto).unwrap()
-            .create().unwrap();
+            .add_event(EventType::Auto)
+            .unwrap()
+            .create()
+            .unwrap();
         println!("Created shmem at {}", shmem.get_os_path());
         let mut receiver = unsafe { Receiver::from_shmem(shmem) };
         receiver.peek();
@@ -181,7 +189,7 @@ fn server() {
         #[cfg(feature = "ipc")]
         let msg = receiver.recv().unwrap();
         if let Foo::A(Bar::A(x)) = msg {
-           total += x;
+            total += x;
         }
         #[cfg(not(feature = "ipc"))]
         receiver.recv();
@@ -211,7 +219,7 @@ fn client(name: String) {
     for _ in 0..ITERATIONS {
         let data = rand::random();
         if let Foo::A(Bar::A(x)) = data {
-           total += x;
+            total += x;
         }
         let _ = sender.send(data);
     }

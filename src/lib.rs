@@ -1,20 +1,20 @@
 use arrayvec::ArrayString;
 use lazy_static::lazy_static;
+use shared_memory::LockType;
 use shared_memory::SharedMem;
 use shared_memory::SharedMemCast;
-use shared_memory::LockType;
-use std::num::NonZeroU8;
-use std::num::NonZeroU64;
 use std::marker::PhantomData;
 use std::mem;
+use std::num::NonZeroU64;
+use std::num::NonZeroU8;
 use std::ptr;
 use std::ptr::NonNull;
-use std::sync::Mutex;
 use std::sync::atomic::AtomicBool;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicPtr;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
+use std::sync::Mutex;
 
 const MAX_SHMEMS: usize = 10_000;
 const MIN_OBJECT_SIZE: usize = 8;
@@ -45,7 +45,14 @@ impl ShmemAllocator {
         let shmem_names = &mut (*metadata).shmem_names[0];
         let shmems = Box::into_raw(Box::new(Default::default()));
         let unused = Box::into_raw(Box::new(Default::default()));
-        ShmemAllocator { shmem, num_shmems, shmem_free, shmem_names, shmems, unused }
+        ShmemAllocator {
+            shmem,
+            num_shmems,
+            shmem_free,
+            shmem_names,
+            shmems,
+            unused,
+        }
     }
 
     fn create() -> Option<ShmemAllocator> {
@@ -80,7 +87,10 @@ impl ShmemAllocator {
         let shmem_name = self.get_shmem_name(shmem_id)?;
         let mut new_shmem = Box::new(SharedMem::open(shmem_name.as_str()).ok()?);
         let new_shmem_ptr = &mut *new_shmem as *mut _;
-        if let Some(new_new_shmem) = atomic_shmem.compare_and_swap(ptr::null_mut(), new_shmem_ptr, Ordering::SeqCst).as_ref() {
+        if let Some(new_new_shmem) = atomic_shmem
+            .compare_and_swap(ptr::null_mut(), new_shmem_ptr, Ordering::SeqCst)
+            .as_ref()
+        {
             return Some(new_new_shmem);
         }
         mem::forget(new_shmem);
@@ -100,7 +110,10 @@ impl ShmemAllocator {
             }
         }
         *self.shmem_names.offset(index as isize) = shmem_name;
-        if (&*self.shmems.offset(index as isize)).compare_and_swap(ptr::null_mut(), shmem_ptr, Ordering::SeqCst).is_null() {
+        if (&*self.shmems.offset(index as isize))
+            .compare_and_swap(ptr::null_mut(), shmem_ptr, Ordering::SeqCst)
+            .is_null()
+        {
             mem::forget(shmem);
         }
         (&*self.num_shmems).fetch_add(1, Ordering::SeqCst);
@@ -125,7 +138,7 @@ impl ShmemAllocator {
         loop {
             let mut old_size = 0;
             let unused = atomic_unused.fetch_add(object_size.as_offset(), Ordering::SeqCst);
-              if let Some(unused) = unused {
+            if let Some(unused) = unused {
                 if let Some(shmem) = self.get_shmem(unused.shmem_id()) {
                     old_size = shmem.get_size();
                     if unused.object_end().as_usize() <= old_size {
@@ -136,7 +149,11 @@ impl ShmemAllocator {
             let new_shmem_size = usize::max(size, old_size * 2);
             let new_shmem_id = self.alloc_shmem(new_shmem_size)?;
             let result = SharedAddress::new(new_shmem_id, object_size, ObjectOffset(0));
-            let new_unused = Some(SharedAddress::new(new_shmem_id, object_size, object_size.as_offset()));
+            let new_unused = Some(SharedAddress::new(
+                new_shmem_id,
+                object_size,
+                object_size.as_offset(),
+            ));
             if unused == atomic_unused.compare_and_swap(unused, new_unused, Ordering::SeqCst) {
                 return Some(result);
             } else {
@@ -227,7 +244,12 @@ unsafe impl SharedMemCast for SharedAddress {}
 struct AtomicSharedAddress(AtomicU64);
 
 impl AtomicSharedAddress {
-    fn compare_and_swap(&self, current: Option<SharedAddress>, new: Option<SharedAddress>, order: Ordering) -> Option<SharedAddress> {
+    fn compare_and_swap(
+        &self,
+        current: Option<SharedAddress>,
+        new: Option<SharedAddress>,
+        order: Ordering,
+    ) -> Option<SharedAddress> {
         let current = current.map(|addr| addr.0.get()).unwrap_or(0);
         let new = new.map(|addr| addr.0.get()).unwrap_or(0);
         let bits = self.0.compare_and_swap(current, new, order);
@@ -236,7 +258,9 @@ impl AtomicSharedAddress {
     fn fetch_add(&self, offset: ObjectOffset, order: Ordering) -> Option<SharedAddress> {
         let bits = self.0.fetch_add(offset.as_u64(), order);
         let result = SharedAddress::from_raw(RawSharedAddress::from_u64(bits));
-        if result.is_none() { self.0.fetch_sub(offset.0 as u64, order); }
+        if result.is_none() {
+            self.0.fetch_sub(offset.0 as u64, order);
+        }
         result
     }
 }
@@ -303,20 +327,20 @@ impl ShmemName {
 struct Offset(u32);
 
 lazy_static! {
-   static ref ALLOCATOR_NAME: Mutex<Option<String>> = Mutex::new(None);
-   static ref ALLOCATOR: ShmemAllocator = {
-       if let Some(name) = ALLOCATOR_NAME.lock().ok().and_then(|mut name| name.take()) {
-           ShmemAllocator::open(&*name).expect(&format!("Failed to open shared memory {}.", name))
-       } else {
-           ShmemAllocator::create().expect("Failed to create shared memory")
-       }
-   };
+    static ref ALLOCATOR_NAME: Mutex<Option<String>> = Mutex::new(None);
+    static ref ALLOCATOR: ShmemAllocator = {
+        if let Some(name) = ALLOCATOR_NAME.lock().ok().and_then(|mut name| name.take()) {
+            ShmemAllocator::open(&*name).expect(&format!("Failed to open shared memory {}.", name))
+        } else {
+            ShmemAllocator::create().expect("Failed to create shared memory")
+        }
+    };
 }
 
 pub fn bootstrap(name: String) {
-   if let Ok(mut allocator_name) = ALLOCATOR_NAME.lock() {
-       *allocator_name = Some(name);
-   }
+    if let Ok(mut allocator_name) = ALLOCATOR_NAME.lock() {
+        *allocator_name = Some(name);
+    }
 }
 
 pub struct SharedBox<T> {
@@ -331,7 +355,8 @@ unsafe impl<T: Send> Send for SharedBox<T> {}
 impl<T> SharedBox<T> {
     pub fn new(data: T) -> SharedBox<T> {
         let size = mem::size_of::<T>();
-        let address = unsafe { ALLOCATOR.alloc_bytes(size) }.expect("Failed to allocate shared box");
+        let address =
+            unsafe { ALLOCATOR.alloc_bytes(size) }.expect("Failed to allocate shared box");
         let marker = PhantomData;
         SharedBox { address, marker }
     }
