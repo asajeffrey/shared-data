@@ -1,6 +1,6 @@
 use sharing_is_caring::ALLOCATOR;
-use std::process::Command;
 use std::env;
+use std::process::Command;
 
 mod harness;
 
