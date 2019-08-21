@@ -1,8 +1,20 @@
 [package]
-name = "sharing-is-caring"
+name = "ipc-experiments"
 version = "0.1.0"
 authors = ["Alan Jeffrey <ajeffrey@mozilla.com>"]
 edition = "2018"
+
+[lib]
+name = "experiments"
+path = "src/lib.rs"
+
+[[bin]]
+name = "child"
+path = "tests/integration/child.rs"
+
+[[test]]
+name = "integration"
+path = "tests/integration/mod.rs"
 
 [features]
 ipc = ["ipc-channel", "serde"]
