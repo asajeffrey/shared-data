@@ -25,7 +25,7 @@ struct ShmemMetadata {
     shmem_names: [ShmemName; MAX_SHMEMS],
 }
 
-struct ShmemAllocator {
+pub struct ShmemAllocator {
     shmem: SharedMem,
     num_shmems: *mut AtomicUsize,
     shmem_free: *mut AtomicBool,
@@ -38,7 +38,7 @@ unsafe impl Sync for ShmemAllocator {}
 unsafe impl Send for ShmemAllocator {}
 
 impl ShmemAllocator {
-    unsafe fn from_shmem(shmem: SharedMem) -> ShmemAllocator {
+    pub unsafe fn from_shmem(shmem: SharedMem) -> ShmemAllocator {
         let metadata = shmem.get_ptr() as *mut ShmemMetadata;
         let num_shmems = &mut (*metadata).num_shmems;
         let shmem_free = &mut (*metadata).shmem_free[0];
@@ -55,16 +55,20 @@ impl ShmemAllocator {
         }
     }
 
-    fn create() -> Option<ShmemAllocator> {
+    pub fn create() -> Option<ShmemAllocator> {
         let size = mem::size_of::<ShmemMetadata>();
         let shmem = SharedMem::create(LockType::RwLock, size).ok()?;
         unsafe { shmem.get_ptr().write_bytes(0, size) };
         Some(unsafe { ShmemAllocator::from_shmem(shmem) })
     }
 
-    fn open(name: &str) -> Option<ShmemAllocator> {
+    pub fn open(name: &str) -> Option<ShmemAllocator> {
         let shmem = SharedMem::open(name).ok()?;
         Some(unsafe { ShmemAllocator::from_shmem(shmem) })
+    }
+
+    pub fn shmem(&self) -> &SharedMem {
+        &self.shmem
     }
 
     fn get_num_shmems(&self) -> usize {
@@ -124,7 +128,7 @@ impl ShmemAllocator {
         // TODO
     }
 
-    fn get_bytes(&self, address: SharedAddress) -> Option<NonNull<u8>> {
+    pub fn get_bytes(&self, address: SharedAddress) -> Option<NonNull<u8>> {
         let shmem = unsafe { self.get_shmem(address.shmem_id()) }?;
         let shmem_ptr = NonNull::new(shmem.get_ptr() as *mut u8)?.as_ptr();
         let object_offset = address.object_offset().as_isize();
@@ -132,7 +136,7 @@ impl ShmemAllocator {
         NonNull::new(object_ptr)
     }
 
-    unsafe fn alloc_bytes(&self, size: usize) -> Option<SharedAddress> {
+    pub unsafe fn alloc_bytes(&self, size: usize) -> Option<SharedAddress> {
         let object_size = ObjectSize::ceil(size);
         let atomic_unused = &*self.unused.offset(object_size.0.get() as isize);
         loop {
@@ -162,7 +166,7 @@ impl ShmemAllocator {
         }
     }
 
-    unsafe fn free_bytes(&self, addr: SharedAddress) {
+    pub unsafe fn free_bytes(&self, addr: SharedAddress) {
         // TODO
     }
 }
@@ -191,7 +195,7 @@ impl RawSharedAddress {
 }
 
 #[derive(Clone, Copy, Eq, Debug, PartialEq)]
-struct SharedAddress(NonZeroU64);
+pub struct SharedAddress(NonZeroU64);
 
 impl SharedAddress {
     unsafe fn from_raw_unchecked(raw: RawSharedAddress) -> SharedAddress {
@@ -241,10 +245,10 @@ impl SharedAddress {
 unsafe impl SharedMemCast for SharedAddress {}
 
 #[derive(Default)]
-struct AtomicSharedAddress(AtomicU64);
+pub struct AtomicSharedAddress(AtomicU64);
 
 impl AtomicSharedAddress {
-    fn compare_and_swap(
+    pub fn compare_and_swap(
         &self,
         current: Option<SharedAddress>,
         new: Option<SharedAddress>,
@@ -255,6 +259,7 @@ impl AtomicSharedAddress {
         let bits = self.0.compare_and_swap(current, new, order);
         SharedAddress::from_raw(RawSharedAddress::from_u64(bits))
     }
+
     fn fetch_add(&self, offset: ObjectOffset, order: Ordering) -> Option<SharedAddress> {
         let bits = self.0.fetch_add(offset.as_u64(), order);
         let result = SharedAddress::from_raw(RawSharedAddress::from_u64(bits));
@@ -327,8 +332,8 @@ impl ShmemName {
 struct Offset(u32);
 
 lazy_static! {
-    static ref ALLOCATOR_NAME: Mutex<Option<String>> = Mutex::new(None);
-    static ref ALLOCATOR: ShmemAllocator = {
+    pub static ref ALLOCATOR_NAME: Mutex<Option<String>> = Mutex::new(None);
+    pub static ref ALLOCATOR: ShmemAllocator = {
         if let Some(name) = ALLOCATOR_NAME.lock().ok().and_then(|mut name| name.take()) {
             ShmemAllocator::open(&*name).expect(&format!("Failed to open shared memory {}.", name))
         } else {
