@@ -57,7 +57,7 @@ impl ShmemAllocator {
 
     pub fn create() -> Option<ShmemAllocator> {
         let size = mem::size_of::<ShmemMetadata>();
-        let shmem = SharedMem::create(LockType::RwLock, size).ok()?;
+        let shmem = SharedMem::create(LockType::Mutex, size).ok()?;
         unsafe { shmem.get_ptr().write_bytes(0, size) };
         Some(unsafe { ShmemAllocator::from_shmem(shmem) })
     }
@@ -102,7 +102,7 @@ impl ShmemAllocator {
     }
 
     unsafe fn alloc_shmem(&self, size: usize) -> Option<ShmemId> {
-        let mut shmem = Box::new(SharedMem::create(LockType::RwLock, size).ok()?);
+        let mut shmem = Box::new(SharedMem::create(LockType::Mutex, size).ok()?);
         let shmem_ptr = &mut *shmem as *mut _;
         let shmem_name = ShmemName::from_str(shmem.get_os_path())?;
         let mut index = (&*self.num_shmems).load(Ordering::Relaxed);
