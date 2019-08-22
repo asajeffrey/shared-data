@@ -41,8 +41,6 @@ pub fn child(shmem_path: String, child_name: String) {
     // Parse the child id
     let child_id = ChildId::from_usize(child_name.parse().unwrap()).unwrap();
 
-    println!("{}, {:?}", child_name, child_id);
-
     // Run the child
     child_id.run();
 }
