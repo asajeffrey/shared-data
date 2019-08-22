@@ -11,6 +11,7 @@ path = "src/lib.rs"
 [[bin]]
 name = "child"
 path = "tests/integration/child.rs"
+test = false
 
 [[test]]
 name = "integration"
