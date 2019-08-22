@@ -9,5 +9,6 @@ fn main() {
     let _exe = args.next().unwrap();
     let shmem_path = args.next().unwrap();
     let child_name = args.next().unwrap();
-    harness::child(shmem_path, child_name);
+    let address_name = args.next().unwrap();
+    harness::child(shmem_path, child_name, address_name);
 }
