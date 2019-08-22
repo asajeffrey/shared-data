@@ -16,6 +16,9 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 
+#[cfg(feature = "no-panic")]
+use no_panic::no_panic;
+
 const MAX_SHMEMS: usize = 10_000;
 const MIN_OBJECT_SIZE: usize = 8;
 
@@ -38,13 +41,14 @@ unsafe impl Sync for ShmemAllocator {}
 unsafe impl Send for ShmemAllocator {}
 
 impl ShmemAllocator {
+    #[cfg_attr(feature = "no-panic", no_panic)]
     pub unsafe fn from_shmem(shmem: SharedMem) -> ShmemAllocator {
         let metadata = shmem.get_ptr() as *mut ShmemMetadata;
         let num_shmems = &mut (*metadata).num_shmems;
         let shmem_free = &mut (*metadata).shmem_free[0];
         let shmem_names = &mut (*metadata).shmem_names[0];
-        let shmems = Box::into_raw(Box::new(Default::default()));
-        let unused = Box::into_raw(Box::new(Default::default()));
+        let shmems = Box::into_raw(Box::new(mem::zeroed()));
+        let unused = Box::into_raw(Box::new(mem::zeroed()));
         ShmemAllocator {
             shmem,
             num_shmems,
@@ -67,14 +71,17 @@ impl ShmemAllocator {
         Some(unsafe { ShmemAllocator::from_shmem(shmem) })
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     pub fn shmem(&self) -> &SharedMem {
         &self.shmem
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn get_num_shmems(&self) -> usize {
         unsafe { &*self.num_shmems }.load(Ordering::SeqCst)
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     unsafe fn get_shmem_name(&self, shmem_id: ShmemId) -> Option<&ShmemName> {
         if (shmem_id.0 as usize) > self.get_num_shmems() {
             None
@@ -83,6 +90,8 @@ impl ShmemAllocator {
         }
     }
 
+    // I'd like to be able to mark this as `no_panic` but unfortunately
+    // the shared memory crate can panic when opening a shared memory file.
     unsafe fn get_shmem(&self, shmem_id: ShmemId) -> Option<&SharedMem> {
         let atomic_shmem = &*self.shmems.offset(shmem_id.0 as isize);
         if let Some(shmem) = atomic_shmem.load(Ordering::SeqCst).as_ref() {
@@ -101,6 +110,8 @@ impl ShmemAllocator {
         Some(&*new_shmem_ptr)
     }
 
+    // I'd like to be able to mark this as `no_panic` but unfortunately
+    // the shared memory crate can panic when creating a shared memory file.
     unsafe fn alloc_shmem(&self, size: usize) -> Option<ShmemId> {
         let mut shmem = Box::new(SharedMem::create(LockType::Mutex, size).ok()?);
         let shmem_ptr = &mut *shmem as *mut _;
@@ -124,6 +135,7 @@ impl ShmemAllocator {
         Some(ShmemId(index as u16))
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     unsafe fn free_shmem(&self, shmem_id: ShmemId) {
         // TODO
     }
@@ -166,6 +178,7 @@ impl ShmemAllocator {
         }
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     pub unsafe fn free_bytes(&self, addr: SharedAddress) {
         // TODO
     }
@@ -181,14 +194,17 @@ struct RawSharedAddress {
 }
 
 impl RawSharedAddress {
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn from_u64(bits: u64) -> RawSharedAddress {
         unsafe { mem::transmute(bits) }
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn to_u64(self) -> u64 {
         unsafe { mem::transmute(self) }
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn is_valid(self) -> bool {
         (self.object_size != 0) && (self.padding == 0)
     }
@@ -198,10 +214,12 @@ impl RawSharedAddress {
 pub struct SharedAddress(NonZeroU64);
 
 impl SharedAddress {
+    #[cfg_attr(feature = "no-panic", no_panic)]
     unsafe fn from_raw_unchecked(raw: RawSharedAddress) -> SharedAddress {
         SharedAddress(NonZeroU64::new_unchecked(raw.to_u64()))
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn from_raw(raw: RawSharedAddress) -> Option<SharedAddress> {
         if raw.is_valid() {
             Some(unsafe { SharedAddress::from_raw_unchecked(raw) })
@@ -210,10 +228,12 @@ impl SharedAddress {
         }
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn as_raw(self) -> RawSharedAddress {
         RawSharedAddress::from_u64(self.0.get())
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn new(shmem_id: ShmemId, size: ObjectSize, offset: ObjectOffset) -> SharedAddress {
         unsafe {
             SharedAddress::from_raw_unchecked(RawSharedAddress {
@@ -225,18 +245,22 @@ impl SharedAddress {
         }
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn shmem_id(self) -> ShmemId {
         ShmemId(self.as_raw().shmem_id)
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn object_size(&self) -> ObjectSize {
         ObjectSize(unsafe { NonZeroU8::new_unchecked(self.as_raw().object_size) })
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn object_offset(&self) -> ObjectOffset {
         ObjectOffset(self.as_raw().object_offset)
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn object_end(&self) -> ObjectOffset {
         self.object_offset() + self.object_size().as_offset()
     }
@@ -248,6 +272,7 @@ unsafe impl SharedMemCast for SharedAddress {}
 pub struct AtomicSharedAddress(AtomicU64);
 
 impl AtomicSharedAddress {
+    #[cfg_attr(feature = "no-panic", no_panic)]
     pub fn compare_and_swap(
         &self,
         current: Option<SharedAddress>,
@@ -260,6 +285,7 @@ impl AtomicSharedAddress {
         SharedAddress::from_raw(RawSharedAddress::from_u64(bits))
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn fetch_add(&self, offset: ObjectOffset, order: Ordering) -> Option<SharedAddress> {
         let bits = self.0.fetch_add(offset.as_u64(), order);
         let result = SharedAddress::from_raw(RawSharedAddress::from_u64(bits));
@@ -274,15 +300,18 @@ impl AtomicSharedAddress {
 struct ObjectSize(NonZeroU8);
 
 impl ObjectSize {
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn as_offset(&self) -> ObjectOffset {
         ObjectOffset(1 << self.0.get())
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn ceil(size: usize) -> ObjectSize {
         let size = usize::max(size, MIN_OBJECT_SIZE);
         ObjectSize(unsafe { NonZeroU8::new_unchecked(64 - size.leading_zeros() as u8) })
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn floor(size: usize) -> ObjectSize {
         let size = usize::max(size, MIN_OBJECT_SIZE);
         ObjectSize(unsafe { NonZeroU8::new_unchecked(63 - (size + 1).leading_zeros() as u8) })
@@ -293,14 +322,17 @@ impl ObjectSize {
 struct ObjectOffset(u32);
 
 impl ObjectOffset {
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn as_u64(self) -> u64 {
         self.0 as u64
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn as_usize(self) -> usize {
         self.0 as usize
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn as_isize(self) -> isize {
         self.0 as isize
     }
@@ -319,11 +351,13 @@ struct ShmemId(u16);
 struct ShmemName(ArrayString<[u8; 16]>);
 
 impl ShmemName {
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn from_str(name: &str) -> Option<Self> {
         let name = ArrayString::from(name).ok()?;
         Some(ShmemName(name))
     }
 
+    #[cfg_attr(feature = "no-panic", no_panic)]
     fn as_str(&self) -> &str {
         self.0.as_str()
     }
