@@ -164,8 +164,8 @@ impl ShmemAllocator {
             if let Some(unused) = unused {
                 if let Some(shmem) = self.get_shmem(unused.shmem_id()) {
                     old_size = shmem.get_size();
-		    let offset = unused.object_offset().to_usize()?;
-		    let end = offset + unused.object_size().to_usize()?;
+                    let offset = unused.object_offset().to_usize()?;
+                    let end = offset + unused.object_size().to_usize()?;
                     if end <= old_size {
                         return Some(unused);
                     }
@@ -262,7 +262,10 @@ impl AtomicSharedAddress {
         new: Option<SharedAddress>,
         order: Ordering,
     ) -> Option<SharedAddress> {
-        let current = current.as_ref().and_then(SharedAddress::to_u64).unwrap_or(0);
+        let current = current
+            .as_ref()
+            .and_then(SharedAddress::to_u64)
+            .unwrap_or(0);
         let new = new.as_ref().and_then(SharedAddress::to_u64).unwrap_or(0);
         let bits = self.0.compare_and_swap(current, new, order);
         SharedAddress::from_u64(bits)
@@ -296,10 +299,10 @@ impl ToPrimitive for ObjectSize {
 impl FromPrimitive for ObjectSize {
     fn from_u64(data: u64) -> Option<ObjectSize> {
         if data.is_power_of_two() {
-	    Some(ObjectSize(63 - data.leading_zeros() as u8))
+            Some(ObjectSize(63 - data.leading_zeros() as u8))
         } else {
-	    None
-	}
+            None
+        }
     }
 
     fn from_i64(data: i64) -> Option<ObjectSize> {
@@ -319,7 +322,9 @@ impl ObjectSize {
     }
 }
 
-#[derive(Clone, Copy, Default, Eq, Debug, Ord, PartialEq, PartialOrd, FromPrimitive, ToPrimitive)]
+#[derive(
+    Clone, Copy, Default, Eq, Debug, Ord, PartialEq, PartialOrd, FromPrimitive, ToPrimitive,
+)]
 struct ObjectOffset(u32);
 
 #[derive(Clone, Copy, Default, Eq, Debug, PartialEq, FromPrimitive, ToPrimitive)]

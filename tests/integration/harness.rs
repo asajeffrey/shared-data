@@ -1,6 +1,6 @@
 use crate::tests::ChildId;
-use experiments::ALLOCATOR;
 use experiments::SharedAddress;
+use experiments::ALLOCATOR;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 use std::env;

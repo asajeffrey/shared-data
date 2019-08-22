@@ -1,7 +1,7 @@
 use crate::harness::spawn_child;
-use experiments::ALLOCATOR;
 use experiments::SharedAddress;
 use experiments::SharedBox;
+use experiments::ALLOCATOR;
 use num_derive::FromPrimitive;
 use num_derive::ToPrimitive;
 use num_traits::ToPrimitive;
