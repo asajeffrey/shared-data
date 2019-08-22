@@ -26,14 +26,17 @@ struct ShmemMetadata {
     num_shmems: AtomicUsize,
     shmem_free: [AtomicBool; MAX_SHMEMS],
     shmem_names: [ShmemName; MAX_SHMEMS],
+    unused: [AtomicSharedAddress; 64],
 }
 
 pub struct ShmemAllocator {
+    // These fields are local to this process
     shmem: SharedMem,
+    shmems: *mut AtomicPtr<SharedMem>,
+    // The rest are stored in the shared memory
     num_shmems: *mut AtomicUsize,
     shmem_free: *mut AtomicBool,
     shmem_names: *mut ShmemName,
-    shmems: *mut AtomicPtr<SharedMem>,
     unused: *mut AtomicSharedAddress,
 }
 
@@ -47,8 +50,8 @@ impl ShmemAllocator {
         let num_shmems = &mut (*metadata).num_shmems;
         let shmem_free = &mut (*metadata).shmem_free[0];
         let shmem_names = &mut (*metadata).shmem_names[0];
+        let unused = &mut (*metadata).unused[0];
         let shmems = Box::into_raw(Box::new(mem::zeroed()));
-        let unused = Box::into_raw(Box::new(mem::zeroed()));
         ShmemAllocator {
             shmem,
             num_shmems,
