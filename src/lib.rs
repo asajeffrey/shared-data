@@ -1,5 +1,9 @@
 use arrayvec::ArrayString;
 use lazy_static::lazy_static;
+use num_derive::FromPrimitive;
+use num_derive::ToPrimitive;
+use num_traits::FromPrimitive;
+use num_traits::ToPrimitive;
 use shared_memory::LockType;
 use shared_memory::SharedMem;
 use shared_memory::SharedMemCast;
@@ -146,21 +150,23 @@ impl ShmemAllocator {
     pub fn get_bytes(&self, address: SharedAddress) -> Option<NonNull<u8>> {
         let shmem = unsafe { self.get_shmem(address.shmem_id()) }?;
         let shmem_ptr = NonNull::new(shmem.get_ptr() as *mut u8)?.as_ptr();
-        let object_offset = address.object_offset().as_isize();
+        let object_offset = address.object_offset().to_isize()?;
         let object_ptr = unsafe { shmem_ptr.offset(object_offset) };
         NonNull::new(object_ptr)
     }
 
     pub unsafe fn alloc_bytes(&self, size: usize) -> Option<SharedAddress> {
-        let object_size = ObjectSize::ceil(size);
-        let atomic_unused = &*self.unused.offset(object_size.0.get() as isize);
+        let object_size = ObjectSize::ceil(usize::max(MIN_OBJECT_SIZE, size));
+        let atomic_unused = &*self.unused.offset(object_size.0 as isize);
         loop {
             let mut old_size = 0;
-            let unused = atomic_unused.fetch_add(object_size.as_offset(), Ordering::SeqCst);
+            let unused = atomic_unused.fetch_add(object_size, Ordering::SeqCst);
             if let Some(unused) = unused {
                 if let Some(shmem) = self.get_shmem(unused.shmem_id()) {
                     old_size = shmem.get_size();
-                    if unused.object_end().as_usize() <= old_size {
+		    let offset = unused.object_offset().to_usize()?;
+		    let end = offset + unused.object_size().to_usize()?;
+                    if end <= old_size {
                         return Some(unused);
                     }
                 }
@@ -171,7 +177,7 @@ impl ShmemAllocator {
             let new_unused = Some(SharedAddress::new(
                 new_shmem_id,
                 object_size,
-                object_size.as_offset(),
+                ObjectOffset::from_u64(object_size.to_u64()?)?,
             ));
             if unused == atomic_unused.compare_and_swap(unused, new_unused, Ordering::SeqCst) {
                 return Some(result);
@@ -188,84 +194,58 @@ impl ShmemAllocator {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Eq, Debug, PartialEq)]
-struct RawSharedAddress {
-    shmem_id: u16,
-    object_size: u8,
+#[derive(Clone, Copy, Eq, Debug, PartialEq, Default)]
+pub struct SharedAddress {
+    shmem_id: ShmemId,
+    object_size: ObjectSize,
     padding: u8,
-    object_offset: u32,
+    object_offset: ObjectOffset,
 }
 
-impl RawSharedAddress {
-    #[cfg_attr(feature = "no-panic", no_panic)]
-    fn from_u64(bits: u64) -> RawSharedAddress {
-        unsafe { mem::transmute(bits) }
+impl FromPrimitive for SharedAddress {
+    fn from_u64(data: u64) -> Option<SharedAddress> {
+        Some(unsafe { mem::transmute(data) })
     }
 
-    #[cfg_attr(feature = "no-panic", no_panic)]
-    fn to_u64(self) -> u64 {
-        unsafe { mem::transmute(self) }
-    }
-
-    #[cfg_attr(feature = "no-panic", no_panic)]
-    fn is_valid(self) -> bool {
-        (self.object_size != 0) && (self.padding == 0)
+    fn from_i64(data: i64) -> Option<SharedAddress> {
+        u64::from_i64(data).and_then(SharedAddress::from_u64)
     }
 }
 
-#[derive(Clone, Copy, Eq, Debug, PartialEq)]
-pub struct SharedAddress(NonZeroU64);
+impl ToPrimitive for SharedAddress {
+    fn to_u64(&self) -> Option<u64> {
+        Some(unsafe { mem::transmute(*self) })
+    }
+
+    fn to_i64(&self) -> Option<i64> {
+        self.to_u64().as_ref().and_then(ToPrimitive::to_i64)
+    }
+}
 
 impl SharedAddress {
     #[cfg_attr(feature = "no-panic", no_panic)]
-    unsafe fn from_raw_unchecked(raw: RawSharedAddress) -> SharedAddress {
-        SharedAddress(NonZeroU64::new_unchecked(raw.to_u64()))
-    }
-
-    #[cfg_attr(feature = "no-panic", no_panic)]
-    fn from_raw(raw: RawSharedAddress) -> Option<SharedAddress> {
-        if raw.is_valid() {
-            Some(unsafe { SharedAddress::from_raw_unchecked(raw) })
-        } else {
-            None
-        }
-    }
-
-    #[cfg_attr(feature = "no-panic", no_panic)]
-    fn as_raw(self) -> RawSharedAddress {
-        RawSharedAddress::from_u64(self.0.get())
-    }
-
-    #[cfg_attr(feature = "no-panic", no_panic)]
     fn new(shmem_id: ShmemId, size: ObjectSize, offset: ObjectOffset) -> SharedAddress {
-        unsafe {
-            SharedAddress::from_raw_unchecked(RawSharedAddress {
-                shmem_id: shmem_id.0,
-                object_size: size.0.get(),
-                padding: 0,
-                object_offset: offset.0,
-            })
+        SharedAddress {
+            shmem_id: shmem_id,
+            object_size: size,
+            padding: 0,
+            object_offset: offset,
         }
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
     fn shmem_id(self) -> ShmemId {
-        ShmemId(self.as_raw().shmem_id)
+        self.shmem_id
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
     fn object_size(&self) -> ObjectSize {
-        ObjectSize(unsafe { NonZeroU8::new_unchecked(self.as_raw().object_size) })
+        self.object_size
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
     fn object_offset(&self) -> ObjectOffset {
-        ObjectOffset(self.as_raw().object_offset)
-    }
-
-    #[cfg_attr(feature = "no-panic", no_panic)]
-    fn object_end(&self) -> ObjectOffset {
-        self.object_offset() + self.object_size().as_offset()
+        self.object_offset
     }
 }
 
@@ -282,75 +262,70 @@ impl AtomicSharedAddress {
         new: Option<SharedAddress>,
         order: Ordering,
     ) -> Option<SharedAddress> {
-        let current = current.map(|addr| addr.0.get()).unwrap_or(0);
-        let new = new.map(|addr| addr.0.get()).unwrap_or(0);
+        let current = current.as_ref().and_then(SharedAddress::to_u64).unwrap_or(0);
+        let new = new.as_ref().and_then(SharedAddress::to_u64).unwrap_or(0);
         let bits = self.0.compare_and_swap(current, new, order);
-        SharedAddress::from_raw(RawSharedAddress::from_u64(bits))
+        SharedAddress::from_u64(bits)
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
-    fn fetch_add(&self, offset: ObjectOffset, order: Ordering) -> Option<SharedAddress> {
-        let bits = self.0.fetch_add(offset.as_u64(), order);
-        let result = SharedAddress::from_raw(RawSharedAddress::from_u64(bits));
+    fn fetch_add(&self, size: ObjectSize, order: Ordering) -> Option<SharedAddress> {
+        let size = size.to_u64()?;
+        let bits = self.0.fetch_add(size, order);
+        let result = SharedAddress::from_u64(bits);
         if result.is_none() {
-            self.0.fetch_sub(offset.0 as u64, order);
+            self.0.fetch_sub(size, order);
         }
         result
     }
 }
 
-#[derive(Clone, Copy, Eq, Debug, Ord, PartialEq, PartialOrd)]
-struct ObjectSize(NonZeroU8);
+#[derive(Clone, Copy, Default, Eq, Debug, Ord, PartialEq, PartialOrd)]
+struct ObjectSize(u8);
+
+impl ToPrimitive for ObjectSize {
+    fn to_u64(&self) -> Option<u64> {
+        1u64.checked_shr(self.0 as u32)
+    }
+
+    fn to_i64(&self) -> Option<i64> {
+        self.to_u64().as_ref().and_then(ToPrimitive::to_i64)
+    }
+}
+
+impl FromPrimitive for ObjectSize {
+    fn from_u64(data: u64) -> Option<ObjectSize> {
+        if data.is_power_of_two() {
+	    Some(ObjectSize(63 - data.leading_zeros() as u8))
+        } else {
+	    None
+	}
+    }
+
+    fn from_i64(data: i64) -> Option<ObjectSize> {
+        u64::from_i64(data).and_then(ObjectSize::from_u64)
+    }
+}
 
 impl ObjectSize {
     #[cfg_attr(feature = "no-panic", no_panic)]
-    fn as_offset(&self) -> ObjectOffset {
-        ObjectOffset(1 << self.0.get())
-    }
-
-    #[cfg_attr(feature = "no-panic", no_panic)]
     fn ceil(size: usize) -> ObjectSize {
-        let size = usize::max(size, MIN_OBJECT_SIZE);
-        ObjectSize(unsafe { NonZeroU8::new_unchecked(64 - (size - 1).leading_zeros() as u8) })
+        ObjectSize(64 - (size - 1).leading_zeros() as u8)
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
     fn floor(size: usize) -> ObjectSize {
-        let size = usize::max(size, MIN_OBJECT_SIZE);
-        ObjectSize(unsafe { NonZeroU8::new_unchecked(63 - size.leading_zeros() as u8) })
+        ObjectSize(63 - size.leading_zeros() as u8)
     }
 }
 
-#[derive(Clone, Copy, Eq, Debug, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Default, Eq, Debug, Ord, PartialEq, PartialOrd, FromPrimitive, ToPrimitive)]
 struct ObjectOffset(u32);
 
-impl ObjectOffset {
-    #[cfg_attr(feature = "no-panic", no_panic)]
-    fn as_u64(self) -> u64 {
-        self.0 as u64
-    }
-
-    #[cfg_attr(feature = "no-panic", no_panic)]
-    fn as_usize(self) -> usize {
-        self.0 as usize
-    }
-
-    #[cfg_attr(feature = "no-panic", no_panic)]
-    fn as_isize(self) -> isize {
-        self.0 as isize
-    }
-}
-
-impl std::ops::Add for ObjectOffset {
-    type Output = ObjectOffset;
-    fn add(self, rhs: ObjectOffset) -> ObjectOffset {
-        ObjectOffset(self.0 + rhs.0)
-    }
-}
-
-#[derive(Clone, Copy, Eq, Debug, PartialEq)]
+#[derive(Clone, Copy, Default, Eq, Debug, PartialEq, FromPrimitive, ToPrimitive)]
 struct ShmemId(u16);
 
+#[derive(Clone, Eq, Debug, PartialEq)]
 struct ShmemName(ArrayString<[u8; 32]>);
 
 impl ShmemName {
