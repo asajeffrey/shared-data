@@ -308,13 +308,13 @@ impl ObjectSize {
     #[cfg_attr(feature = "no-panic", no_panic)]
     fn ceil(size: usize) -> ObjectSize {
         let size = usize::max(size, MIN_OBJECT_SIZE);
-        ObjectSize(unsafe { NonZeroU8::new_unchecked(64 - size.leading_zeros() as u8) })
+        ObjectSize(unsafe { NonZeroU8::new_unchecked(64 - (size - 1).leading_zeros() as u8) })
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
     fn floor(size: usize) -> ObjectSize {
         let size = usize::max(size, MIN_OBJECT_SIZE);
-        ObjectSize(unsafe { NonZeroU8::new_unchecked(63 - (size + 1).leading_zeros() as u8) })
+        ObjectSize(unsafe { NonZeroU8::new_unchecked(63 - size.leading_zeros() as u8) })
     }
 }
 
@@ -348,7 +348,7 @@ impl std::ops::Add for ObjectOffset {
 #[derive(Clone, Copy, Eq, Debug, PartialEq)]
 struct ShmemId(u16);
 
-struct ShmemName(ArrayString<[u8; 16]>);
+struct ShmemName(ArrayString<[u8; 32]>);
 
 impl ShmemName {
     #[cfg_attr(feature = "no-panic", no_panic)]
@@ -392,17 +392,30 @@ unsafe impl<T: Sync> Sync for SharedBox<T> {}
 unsafe impl<T: Send> Send for SharedBox<T> {}
 
 impl<T> SharedBox<T> {
-    pub fn new(data: T) -> SharedBox<T> {
+    pub fn new_in(data: T, alloc: &ShmemAllocator) -> Option<SharedBox<T>> {
         let size = mem::size_of::<T>();
-        let address =
-            unsafe { ALLOCATOR.alloc_bytes(size) }.expect("Failed to allocate shared box");
+        let address = unsafe { alloc.alloc_bytes(size)? };
+        let ptr = alloc.get_bytes(address)?.as_ptr() as *mut T;
+        unsafe { ptr.write_volatile(data) };
         let marker = PhantomData;
-        SharedBox { address, marker }
+        Some(SharedBox { address, marker })
+    }
+
+    pub fn as_ptr_in(&self, alloc: &ShmemAllocator) -> Option<NonNull<T>> {
+        let ptr = alloc.get_bytes(self.address)?;
+        Some(ptr.cast())
+    }
+
+    pub fn new(data: T) -> SharedBox<T> {
+        SharedBox::new_in(data, &ALLOCATOR).expect("Failed to allocate shared box")
     }
 
     pub fn as_ptr(&self) -> Option<NonNull<T>> {
-        let ptr = ALLOCATOR.get_bytes(self.address)?;
-        Some(ptr.cast())
+        self.as_ptr_in(&ALLOCATOR)
+    }
+
+    pub fn address(&self) -> SharedAddress {
+        self.address
     }
 }
 
@@ -415,4 +428,12 @@ impl<T> Drop for SharedBox<T> {
             ALLOCATOR.free_bytes(self.address);
         }
     }
+}
+
+#[test]
+fn test_shared_box() {
+    let boxed: SharedBox<usize> = SharedBox::new(37);
+    let ptr = boxed.as_ptr().unwrap().as_ptr();
+    let val = unsafe { ptr.read_volatile() };
+    assert_eq!(val, 37);
 }
