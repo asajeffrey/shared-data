@@ -7,6 +7,7 @@ use num_traits::ToPrimitive;
 use shared_memory::LockType;
 use shared_memory::SharedMem;
 use shared_memory::SharedMemCast;
+use std::iter;
 use std::marker::PhantomData;
 use std::mem;
 use std::num::NonZeroU64;
@@ -55,7 +56,12 @@ impl ShmemAllocator {
         let shmem_used = &mut (*metadata).shmem_used[0];
         let shmem_names = &mut (*metadata).shmem_names[0];
         let unused = &mut (*metadata).unused[0];
-        let shmems = Box::into_raw(Box::new(mem::zeroed()));
+        let mut shmem_vec: Vec<AtomicPtr<SharedMem>> =
+            iter::repeat_with(|| AtomicPtr::new(ptr::null_mut()))
+                .take(MAX_SHMEMS)
+                .collect();
+        let shmems = shmem_vec.as_mut_ptr();
+        mem::forget(shmem_vec);
         ShmemAllocator {
             shmem,
             shmems,
