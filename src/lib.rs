@@ -28,7 +28,7 @@ const MIN_OBJECT_SIZE: usize = 8;
 
 struct ShmemMetadata {
     num_shmems: AtomicUsize,
-    shmem_free: [AtomicBool; MAX_SHMEMS],
+    shmem_used: [AtomicBool; MAX_SHMEMS],
     shmem_names: [ShmemName; MAX_SHMEMS],
     unused: [AtomicSharedAddress; 64],
 }
@@ -39,7 +39,7 @@ pub struct ShmemAllocator {
     shmems: *mut AtomicPtr<SharedMem>,
     // The rest are stored in the shared memory
     num_shmems: *mut AtomicUsize,
-    shmem_free: *mut AtomicBool,
+    shmem_used: *mut AtomicBool,
     shmem_names: *mut ShmemName,
     unused: *mut AtomicSharedAddress,
 }
@@ -52,16 +52,16 @@ impl ShmemAllocator {
     pub unsafe fn from_shmem(shmem: SharedMem) -> ShmemAllocator {
         let metadata = shmem.get_ptr() as *mut ShmemMetadata;
         let num_shmems = &mut (*metadata).num_shmems;
-        let shmem_free = &mut (*metadata).shmem_free[0];
+        let shmem_used = &mut (*metadata).shmem_used[0];
         let shmem_names = &mut (*metadata).shmem_names[0];
         let unused = &mut (*metadata).unused[0];
         let shmems = Box::into_raw(Box::new(mem::zeroed()));
         ShmemAllocator {
             shmem,
-            num_shmems,
-            shmem_free,
-            shmem_names,
             shmems,
+            num_shmems,
+            shmem_used,
+            shmem_names,
             unused,
         }
     }
