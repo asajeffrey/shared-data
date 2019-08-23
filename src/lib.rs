@@ -199,13 +199,24 @@ impl ShmemAllocator {
     }
 }
 
+#[cfg(target_endian = "big")]
 #[repr(C)]
-#[derive(Clone, Copy, Eq, Debug, PartialEq, Default)]
+#[derive(Clone, Copy, Eq, Debug, PartialEq)]
 pub struct SharedAddress {
     shmem_id: ShmemId,
     object_size: ObjectSize,
     padding: u8,
     object_offset: ObjectOffset,
+}
+
+#[cfg(target_endian = "little")]
+#[repr(C)]
+#[derive(Clone, Copy, Eq, Debug, PartialEq)]
+pub struct SharedAddress {
+    object_offset: ObjectOffset,
+    padding: u8,
+    object_size: ObjectSize,
+    shmem_id: ShmemId,
 }
 
 impl FromPrimitive for SharedAddress {
