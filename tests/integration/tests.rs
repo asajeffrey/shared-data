@@ -13,6 +13,7 @@ use std::process::Command;
 pub enum ChildId {
     Fail,
     Noop,
+    SharedBox,
 }
 
 impl ChildId {
@@ -20,6 +21,7 @@ impl ChildId {
         match self {
             ChildId::Fail => run_fail(address),
             ChildId::Noop => run_noop(address),
+            ChildId::SharedBox => run_shared_box(address),
         }
     }
 }
@@ -33,13 +35,31 @@ fn run_fail(_address: SharedAddress) {
 }
 
 #[test]
-fn test_setup() {
-    let mut child = spawn_child(ChildId::Noop, SharedAddress::default());
+fn test_setup_success() {
+    let boxed: SharedBox<usize> = SharedBox::new(37);
+    let mut child = spawn_child(ChildId::Noop, boxed.address());
     assert!(child.wait().unwrap().success());
 }
 
 #[test]
 fn test_setup_failure() {
-    let mut child = spawn_child(ChildId::Fail, SharedAddress::default());
+    let boxed: SharedBox<usize> = SharedBox::new(37);
+    let mut child = spawn_child(ChildId::Fail, boxed.address());
     assert!(!child.wait().unwrap().success());
+}
+
+#[test]
+fn test_shared_box() {
+    let boxed: SharedBox<usize> = SharedBox::new(37);
+    let mut child = spawn_child(ChildId::SharedBox, boxed.address());
+    assert!(child.wait().unwrap().success());
+    let val = unsafe { boxed.as_ptr().unwrap().as_ptr().read_volatile() };
+    assert_eq!(val, 37);
+}
+
+fn run_shared_box(address: SharedAddress) {
+    //let boxed: SharedBox<usize> = SharedBox::new(37);
+    //let ptr = boxed.as_ptr().unwrap().as_ptr();
+    //let val = unsafe { ptr.read_volatile() };
+    //assert_eq!(val, 37);
 }
