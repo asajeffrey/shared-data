@@ -1,5 +1,6 @@
 use arrayvec::ArrayString;
 use lazy_static::lazy_static;
+use log::debug;
 use num_derive::FromPrimitive;
 use num_derive::ToPrimitive;
 use num_traits::FromPrimitive;
@@ -127,22 +128,30 @@ impl ShmemAllocator {
     // the shared memory crate can panic when creating a shared memory file.
     unsafe fn alloc_shmem(&self, size: usize) -> Option<ShmemId> {
         let mut shmem = Box::new(SharedMem::create(LockType::Mutex, size).ok()?);
-        let shmem_ptr = &mut *shmem as *mut _;
+        let shmem_ptr = &mut *shmem as *mut SharedMem;
         let shmem_name = ShmemName::from_str(shmem.get_os_path())?;
         let mut index = (&*self.num_shmems).load(Ordering::Relaxed);
-        while (&*self.shmem_free.offset(index as isize)).swap(true, Ordering::SeqCst) {
+        while (&*self.shmem_used.offset(index as isize)).swap(true, Ordering::SeqCst) {
             if MAX_SHMEMS <= index {
                 return None;
             } else {
                 index += 1;
             }
         }
+        debug!(
+            "Allocated shmem {} of size {} (requested {})",
+            index,
+            (&*shmem_ptr).get_size(),
+            size
+        );
         *self.shmem_names.offset(index as isize) = shmem_name;
         if (&*self.shmems.offset(index as isize))
             .compare_and_swap(ptr::null_mut(), shmem_ptr, Ordering::SeqCst)
             .is_null()
         {
             mem::forget(shmem);
+        } else {
+            debug!("Another thread has already opened shmem {}", index);
         }
         (&*self.num_shmems).fetch_add(1, Ordering::SeqCst);
         Some(ShmemId(index as u16))
@@ -167,13 +176,18 @@ impl ShmemAllocator {
         loop {
             let mut old_size = 0;
             let unused = atomic_unused.fetch_add(object_size, Ordering::SeqCst);
+            let mut next_unused = None;
             if let Some(unused) = unused {
+                next_unused = unused.checked_add(object_size);
                 if let Some(shmem) = self.get_shmem(unused.shmem_id()) {
                     old_size = shmem.get_size();
-                    let offset = unused.object_offset().to_usize()?;
-                    let end = offset + unused.object_size().to_usize()?;
-                    if end <= old_size {
-                        return Some(unused);
+                    if let Some(next_unused) = next_unused {
+                        if let Some(offset) = next_unused.object_offset().to_usize() {
+                            if offset <= old_size {
+                                debug!("Using unused address {:?}..{:?}", unused, next_unused);
+                                return Some(unused);
+                            }
+                        }
                     }
                 }
             }
@@ -185,7 +199,11 @@ impl ShmemAllocator {
                 object_size,
                 ObjectOffset::from_u64(object_size.to_u64()?)?,
             ));
-            if unused == atomic_unused.compare_and_swap(unused, new_unused, Ordering::SeqCst) {
+            let next_unused = unused.and_then(|unused| unused.checked_add(object_size));
+            if next_unused
+                == atomic_unused.compare_and_swap(next_unused, new_unused, Ordering::SeqCst)
+            {
+                debug!("Using fresh shem address {:?}", result);
                 return Some(result);
             } else {
                 self.free_shmem(new_shmem_id);
@@ -221,7 +239,11 @@ pub struct SharedAddress {
 
 impl FromPrimitive for SharedAddress {
     fn from_u64(data: u64) -> Option<SharedAddress> {
-        Some(unsafe { mem::transmute(data) })
+        if data == 0 {
+            None
+        } else {
+            Some(unsafe { mem::transmute(data) })
+        }
     }
 
     fn from_i64(data: i64) -> Option<SharedAddress> {
@@ -248,6 +270,13 @@ impl SharedAddress {
             padding: 0,
             object_offset: offset,
         }
+    }
+
+    #[cfg_attr(feature = "no-panic", no_panic)]
+    fn checked_add(self, size: ObjectSize) -> Option<SharedAddress> {
+        let address = self.to_u64()?;
+        let size = size.to_u64()?;
+        address.checked_add(size).and_then(SharedAddress::from_u64)
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
@@ -305,7 +334,7 @@ struct ObjectSize(u8);
 
 impl ToPrimitive for ObjectSize {
     fn to_u64(&self) -> Option<u64> {
-        1u64.checked_shr(self.0 as u32)
+        1u64.checked_shl(self.0 as u32)
     }
 
     fn to_i64(&self) -> Option<i64> {
@@ -431,9 +460,25 @@ impl<T> Drop for SharedBox<T> {
 }
 
 #[test]
-fn test_shared_box() {
+fn test_one_box() {
     let boxed: SharedBox<usize> = SharedBox::new(37);
     let ptr = boxed.as_ptr().unwrap().as_ptr();
     let val = unsafe { ptr.read_volatile() };
     assert_eq!(val, 37);
+}
+
+#[test]
+fn test_five_boxes() {
+    let boxed: [SharedBox<usize>; 5] = [
+        SharedBox::new(1),
+        SharedBox::new(2),
+        SharedBox::new(3),
+        SharedBox::new(4),
+        SharedBox::new(5),
+    ];
+    for i in 0..5 {
+        let ptr = boxed[i].as_ptr().unwrap().as_ptr();
+        let val = unsafe { ptr.read_volatile() };
+        assert_eq!(val, i + 1);
+    }
 }
