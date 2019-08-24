@@ -53,7 +53,7 @@ fn test_shared_box() {
     let boxed: SharedBox<usize> = SharedBox::new(37);
     let mut child = spawn_child(ChildId::SharedBox, boxed.address());
     assert!(child.wait().unwrap().success());
-    let val = unsafe { boxed.as_ptr().unwrap().as_ptr().read_volatile() };
+    let val = unsafe { boxed.as_ptr().read_volatile() };
     assert_eq!(val, 37);
 }
 
