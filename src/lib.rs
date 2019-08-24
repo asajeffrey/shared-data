@@ -464,7 +464,9 @@ unsafe impl<T: Sync> Sync for SharedBox<T> {}
 unsafe impl<T: Send> Send for SharedBox<T> {}
 
 impl<T> SharedBox<T> {
-    pub fn new_in(data: T, alloc: &ShmemAllocator) -> Option<SharedBox<T>> {
+    // This is unsafe because if you create in one allocator and read from another
+    // then you can get UB.
+    pub unsafe fn new_in(data: T, alloc: &ShmemAllocator) -> Option<SharedBox<T>> {
         let size = mem::size_of::<T>();
         let address = unsafe { alloc.alloc_bytes(size)? };
         let ptr = alloc.get_bytes(address)? as *mut T;
@@ -473,12 +475,18 @@ impl<T> SharedBox<T> {
         Some(SharedBox { address, marker })
     }
 
+    // If you create in one allocator and read from another
+    // then you can get an invalid pointer.
     pub fn as_ptr_in(&self, alloc: &ShmemAllocator) -> *mut T {
         alloc.get_bytes(self.address).unwrap_or(ptr::null_mut()) as *mut T
     }
 
+    pub fn try_new(data: T) -> Option<SharedBox<T>> {
+        unsafe { SharedBox::new_in(data, &ALLOCATOR) }
+    }
+
     pub fn new(data: T) -> SharedBox<T> {
-        SharedBox::new_in(data, &ALLOCATOR).expect("Failed to allocate shared box")
+        SharedBox::try_new(data).expect("Failed to allocate shared box")
     }
 
     pub fn as_ptr(&self) -> *mut T {
