@@ -1,6 +1,7 @@
 use crate::harness::spawn_child;
 use experiments::SharedAddress;
 use experiments::SharedBox;
+use experiments::SharedVec;
 use experiments::ALLOCATOR;
 use num_derive::FromPrimitive;
 use num_derive::ToPrimitive;
@@ -16,6 +17,7 @@ pub enum ChildId {
     Fail,
     Noop,
     SharedBox,
+    SharedVec,
 }
 
 impl ChildId {
@@ -24,6 +26,7 @@ impl ChildId {
             ChildId::Fail => run_fail(address),
             ChildId::Noop => run_noop(address),
             ChildId::SharedBox => run_shared_box(address),
+            ChildId::SharedVec => run_shared_vec(address),
         }
     }
 }
@@ -60,8 +63,22 @@ fn test_shared_box() {
 }
 
 fn run_shared_box(address: SharedAddress) {
-    //let boxed: SharedBox<usize> = SharedBox::new(37);
-    //let ptr = boxed.as_ptr().unwrap().as_ptr();
-    //let val = unsafe { ptr.read_volatile() };
-    //assert_eq!(val, 37);
+    // TODO
+}
+
+#[test]
+fn test_vector() {
+    let vec = SharedVec::from_iter((0..37).map(|i| AtomicUsize::new(i + 1)));
+    let mut last = 0;
+    for (i, atomic) in vec.iter().enumerate() {
+        let val = atomic.load(Ordering::SeqCst);
+        assert_eq!(val, i + 1);
+        assert_eq!(last, i);
+        last = val;
+    }
+    assert_eq!(last, 37);
+}
+
+fn run_shared_vec(address: SharedAddress) {
+    // TODO
 }
