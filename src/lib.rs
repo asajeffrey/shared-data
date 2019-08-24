@@ -508,22 +508,22 @@ impl<T> Drop for SharedBox<T> {
 
 #[test]
 fn test_one_box() {
-    let boxed: SharedBox<usize> = SharedBox::new(37);
-    let val = unsafe { boxed.as_ptr().read_volatile() };
+    let boxed: SharedBox<AtomicUsize> = SharedBox::new(AtomicUsize::new(37));
+    let val = boxed.load(Ordering::SeqCst);
     assert_eq!(val, 37);
 }
 
 #[test]
 fn test_five_boxes() {
-    let boxed: [SharedBox<usize>; 5] = [
-        SharedBox::new(1),
-        SharedBox::new(2),
-        SharedBox::new(3),
-        SharedBox::new(4),
-        SharedBox::new(5),
+    let boxed: [SharedBox<AtomicUsize>; 5] = [
+        SharedBox::new(AtomicUsize::new(1)),
+        SharedBox::new(AtomicUsize::new(2)),
+        SharedBox::new(AtomicUsize::new(3)),
+        SharedBox::new(AtomicUsize::new(4)),
+        SharedBox::new(AtomicUsize::new(5)),
     ];
     for i in 0..5 {
-        let val = unsafe { boxed[i].as_ptr().read_volatile() };
+        let val = boxed[i].load(Ordering::SeqCst);
         assert_eq!(val, i + 1);
     }
 }

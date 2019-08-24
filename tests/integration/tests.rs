@@ -7,6 +7,8 @@ use num_derive::ToPrimitive;
 use num_traits::ToPrimitive;
 use std::env;
 use std::process::Command;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
 // An enum of all the tests
 #[derive(Copy, Clone, Debug, FromPrimitive, ToPrimitive)]
@@ -50,10 +52,10 @@ fn test_setup_failure() {
 
 #[test]
 fn test_shared_box() {
-    let boxed: SharedBox<usize> = SharedBox::new(37);
+    let boxed = SharedBox::new(AtomicUsize::new(37));
     let mut child = spawn_child(ChildId::SharedBox, boxed.address());
     assert!(child.wait().unwrap().success());
-    let val = unsafe { boxed.as_ptr().read_volatile() };
+    let val = boxed.load(Ordering::SeqCst);
     assert_eq!(val, 37);
 }
 
