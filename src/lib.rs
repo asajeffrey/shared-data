@@ -169,6 +169,7 @@ impl ShmemAllocator {
         if object_end <= shmem.get_size() {
             Some(unsafe { shmem.get_ptr().offset(object_offset) as *mut u8 })
         } else {
+            debug!("Out of range dereferncing {:?}", address);
             None
         }
     }
