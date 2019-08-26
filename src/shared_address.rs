@@ -36,10 +36,11 @@ pub struct SharedAddress {
 
 impl FromPrimitive for SharedAddress {
     fn from_u64(data: u64) -> Option<SharedAddress> {
-        if data == 0 {
-            None
+        let result: SharedAddress = unsafe { mem::transmute(data) };
+        if result.padding == 0 {
+            Some(result)
         } else {
-            Some(unsafe { mem::transmute(data) })
+            None
         }
     }
 
