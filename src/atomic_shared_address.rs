@@ -10,6 +10,9 @@ use shared_memory::SharedMemCast;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
+#[cfg(feature = "no-panic")]
+use no_panic::no_panic;
+
 #[derive(Default)]
 pub struct AtomicSharedAddress(AtomicU64);
 

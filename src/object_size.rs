@@ -6,6 +6,9 @@ use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 use shared_memory::SharedMemCast;
 
+#[cfg(feature = "no-panic")]
+use no_panic::no_panic;
+
 #[derive(Clone, Copy, Default, Eq, Debug, Ord, PartialEq, PartialOrd)]
 pub struct ObjectSize(pub(crate) u8);
 

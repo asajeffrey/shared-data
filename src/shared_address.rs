@@ -10,6 +10,9 @@ use num_traits::ToPrimitive;
 use shared_memory::SharedMemCast;
 use std::mem;
 
+#[cfg(feature = "no-panic")]
+use no_panic::no_panic;
+
 // Using repr C implies that on big-endian architectures
 // we can use atomic addition on an address in the last field to mean atomic
 // addition on the offset (possibly overflowing into the padding).

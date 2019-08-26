@@ -24,6 +24,9 @@ use crate::SharedAddress;
 use crate::ShmemId;
 use crate::ShmemName;
 
+#[cfg(feature = "no-panic")]
+use no_panic::no_panic;
+
 const MAX_SHMEMS: usize = 10_000;
 const MIN_OBJECT_SIZE: usize = 8;
 

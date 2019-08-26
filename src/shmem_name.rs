@@ -4,6 +4,9 @@
 
 use arrayvec::ArrayString;
 
+#[cfg(feature = "no-panic")]
+use no_panic::no_panic;
+
 #[derive(Clone, Eq, Debug, PartialEq)]
 pub struct ShmemName(ArrayString<[u8; 32]>);
 
