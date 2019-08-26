@@ -5,6 +5,7 @@
 use num_derive::FromPrimitive;
 use num_derive::ToPrimitive;
 
-#[derive(Clone, Copy, Default, Eq, Debug, Ord, PartialEq, PartialOrd)]
-#[derive(FromPrimitive, ToPrimitive)]
+#[derive(
+    Clone, Copy, Default, Eq, Debug, Ord, PartialEq, PartialOrd, FromPrimitive, ToPrimitive,
+)]
 pub struct ObjectOffset(u32);

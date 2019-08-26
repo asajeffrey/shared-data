@@ -10,6 +10,9 @@ use num_traits::ToPrimitive;
 use shared_memory::SharedMemCast;
 use std::mem;
 
+// Using repr C implies that on big-endian architectures
+// we can use atomic addition on an address in the last field to mean atomic
+// addition on the offset (possibly overflowing into the padding).
 #[cfg(target_endian = "big")]
 #[repr(C)]
 #[derive(Clone, Copy, Eq, Debug, PartialEq)]
@@ -20,6 +23,7 @@ pub struct SharedAddress {
     object_offset: ObjectOffset,
 }
 
+// Ditto for the first field on little-endian.
 #[cfg(target_endian = "little")]
 #[repr(C)]
 #[derive(Clone, Copy, Eq, Debug, PartialEq)]
