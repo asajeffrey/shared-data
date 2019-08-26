@@ -1,14 +1,16 @@
+#[cfg(test)]
 use crate::harness::spawn_child;
+#[cfg(not(test))]
 use experiments::SharedAddress;
+#[cfg(test)]
 use experiments::SharedBox;
+#[cfg(test)]
 use experiments::SharedVec;
-use experiments::ALLOCATOR;
 use num_derive::FromPrimitive;
 use num_derive::ToPrimitive;
-use num_traits::ToPrimitive;
-use std::env;
-use std::process::Command;
+#[cfg(test)]
 use std::sync::atomic::AtomicUsize;
+#[cfg(test)]
 use std::sync::atomic::Ordering;
 
 // An enum of all the tests
@@ -20,6 +22,8 @@ pub enum ChildId {
     SharedVec,
 }
 
+// This is run in the child process, not the main test process
+#[cfg(not(test))]
 impl ChildId {
     pub fn run(&self, address: SharedAddress) {
         match self {
@@ -32,9 +36,11 @@ impl ChildId {
 }
 
 // A child process that does nothing
+#[cfg(not(test))]
 fn run_noop(_address: SharedAddress) {}
 
 // A child process that fails
+#[cfg(not(test))]
 fn run_fail(_address: SharedAddress) {
     assert_eq!(1, 2);
 }
@@ -62,7 +68,8 @@ fn test_shared_box() {
     assert_eq!(val, 37);
 }
 
-fn run_shared_box(address: SharedAddress) {
+#[cfg(not(test))]
+fn run_shared_box(_address: SharedAddress) {
     // TODO
 }
 
@@ -79,6 +86,7 @@ fn test_vector() {
     assert_eq!(last, 37);
 }
 
-fn run_shared_vec(address: SharedAddress) {
+#[cfg(not(test))]
+fn run_shared_vec(_address: SharedAddress) {
     // TODO
 }

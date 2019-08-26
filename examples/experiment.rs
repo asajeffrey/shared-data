@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use rand::distributions::Distribution;
 use rand::distributions::Standard;
 use rand::Rng;
@@ -8,7 +10,6 @@ use shared_memory::EventWait;
 use shared_memory::SharedMem;
 use shared_memory::SharedMemConf;
 use shared_memory::Timeout;
-use std::error::Error;
 use std::sync::atomic::AtomicIsize;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
@@ -90,7 +91,7 @@ impl<T> Sender<T> {
         unsafe {
             self.base.offset(index).write(Some(data));
         }
-        self.shmem.set(self.condvar, EventState::Signaled);
+        let _ = self.shmem.set(self.condvar, EventState::Signaled);
     }
 }
 

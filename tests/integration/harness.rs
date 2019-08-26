@@ -1,13 +1,19 @@
 use crate::tests::ChildId;
 use experiments::SharedAddress;
 use experiments::ALLOCATOR;
-use num_traits::FromPrimitive;
-use num_traits::ToPrimitive;
+#[cfg(test)]
 use std::env;
+#[cfg(test)]
 use std::process::Child;
+#[cfg(test)]
 use std::process::Command;
+#[cfg(not(test))]
+use num_traits::FromPrimitive;
+#[cfg(test)]
+use num_traits::ToPrimitive;
 
 // This code is run in the main test process
+#[cfg(test)]
 pub fn spawn_child(child_id: ChildId, address: SharedAddress) -> Child {
     // Get the name of the shared memory
     let shmem_path = ALLOCATOR.shmem().get_os_path();
@@ -33,6 +39,7 @@ pub fn spawn_child(child_id: ChildId, address: SharedAddress) -> Child {
 }
 
 // This code is run in the child processes
+#[cfg(not(test))]
 pub fn child(shmem_path: String, child_name: String, address_name: String) {
     // Bootstrap the shared memory
     experiments::bootstrap(shmem_path.clone());

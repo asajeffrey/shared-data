@@ -1,13 +1,11 @@
-use env_logger;
-use std::env;
-
 mod harness;
 mod tests;
 
 // A program that calls back into the harness
+#[cfg(not(test))]
 fn main() {
-    env_logger::init();
-    let mut args = env::args();
+    let _ = env_logger::init();
+    let mut args = std::env::args();
     let _exe = args.next().unwrap();
     let shmem_path = args.next().unwrap();
     let child_name = args.next().unwrap();
