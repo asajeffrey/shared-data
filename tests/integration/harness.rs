@@ -1,16 +1,16 @@
 use crate::tests::ChildId;
 use experiments::SharedAddress;
 use experiments::ALLOCATOR;
+#[cfg(not(test))]
+use num_traits::FromPrimitive;
+#[cfg(test)]
+use num_traits::ToPrimitive;
 #[cfg(test)]
 use std::env;
 #[cfg(test)]
 use std::process::Child;
 #[cfg(test)]
 use std::process::Command;
-#[cfg(not(test))]
-use num_traits::FromPrimitive;
-#[cfg(test)]
-use num_traits::ToPrimitive;
 
 // This code is run in the main test process
 #[cfg(test)]
