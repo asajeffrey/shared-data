@@ -6,7 +6,7 @@ os:
   - windows
 
 rust:
-  - nightly
+  - beta
   - stable
 
 before_script:
