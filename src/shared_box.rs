@@ -52,6 +52,11 @@ impl<T> SharedBox<T> {
         self.as_ptr_in(&ALLOCATOR)
     }
 
+    // This is unsafe because T might not implement SharedMemRef.
+    pub unsafe fn unchecked_deref(&self) -> &T {
+        unsafe { &*self.as_ptr() }
+    }
+
     pub fn address(&self) -> SharedAddress {
         self.address
     }
@@ -60,7 +65,7 @@ impl<T> SharedBox<T> {
 impl<T: SharedMemRef> Deref for SharedBox<T> {
     type Target = T;
     fn deref(&self) -> &T {
-        unsafe { &*self.as_ptr() }
+        unsafe { self.unchecked_deref() }
     }
 }
 
