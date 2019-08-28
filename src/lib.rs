@@ -3,6 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 mod allocator;
+mod atomic_shared;
 mod atomic_shared_address;
 mod object_offset;
 mod object_size;
@@ -18,6 +19,7 @@ mod shmem_name;
 pub use allocator::bootstrap;
 pub use allocator::ShmemAllocator;
 pub use allocator::ALLOCATOR;
+pub use atomic_shared::AtomicShared;
 pub use atomic_shared_address::AtomicSharedAddress;
 pub use object_offset::ObjectOffset;
 pub use object_size::ObjectSize;

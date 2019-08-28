@@ -7,7 +7,10 @@ use crate::SharedBox;
 use crate::SharedMemRef;
 use crate::ShmemAllocator;
 use crate::ALLOCATOR;
+use num_traits::ToPrimitive;
 use shared_memory::SharedMemCast;
+use std::convert::From;
+use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::mem;
 use std::ops::Deref;
@@ -58,6 +61,30 @@ impl<T> SharedRc<T> {
 
     pub fn address(&self) -> SharedAddressRange {
         self.address
+    }
+}
+
+impl<T> TryFrom<SharedAddressRange> for SharedRc<T> {
+    type Error = ();
+    fn try_from(address: SharedAddressRange) -> Result<SharedRc<T>, ()> {
+        if mem::size_of::<(AtomicUsize, T)>() <= address.object_size().to_usize().ok_or(())? {
+            let result: SharedRc<T> = SharedRc {
+                address,
+                marker: PhantomData,
+            };
+            result.ref_count().fetch_add(1, Ordering::SeqCst);
+            Ok(result)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl<T> From<SharedRc<T>> for SharedAddressRange {
+    fn from(rc: SharedRc<T>) -> SharedAddressRange {
+        let address = rc.address;
+        mem::forget(rc);
+        address
     }
 }
 
