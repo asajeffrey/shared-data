@@ -4,6 +4,7 @@
 
 use crate::ObjectOffset;
 use crate::ObjectSize;
+use crate::SharedAddressRange;
 use crate::ShmemId;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
@@ -21,7 +22,7 @@ use no_panic::no_panic;
 #[derive(Clone, Copy, Eq, Debug, PartialEq)]
 pub struct SharedAddress {
     shmem_id: ShmemId,
-    object_size: ObjectSize,
+    shmem_size: ObjectSize,
     padding: u8,
     object_offset: ObjectOffset,
 }
@@ -33,51 +34,35 @@ pub struct SharedAddress {
 pub struct SharedAddress {
     object_offset: ObjectOffset,
     padding: u8,
-    object_size: ObjectSize,
+    shmem_size: ObjectSize,
     shmem_id: ShmemId,
 }
 
-impl FromPrimitive for SharedAddress {
-    fn from_u64(data: u64) -> Option<SharedAddress> {
-        let result: SharedAddress = unsafe { mem::transmute(data) };
-        if result.padding == 0 {
-            Some(result)
-        } else {
-            None
-        }
-    }
-
-    fn from_i64(data: i64) -> Option<SharedAddress> {
-        u64::from_i64(data).and_then(SharedAddress::from_u64)
+impl From<u64> for SharedAddress {
+    fn from(data: u64) -> SharedAddress {
+        unsafe { mem::transmute(data) }
     }
 }
 
-impl ToPrimitive for SharedAddress {
-    fn to_u64(&self) -> Option<u64> {
-        Some(unsafe { mem::transmute(*self) })
-    }
-
-    fn to_i64(&self) -> Option<i64> {
-        self.to_u64().as_ref().and_then(ToPrimitive::to_i64)
+impl From<SharedAddress> for u64 {
+    fn from(address: SharedAddress) -> u64 {
+        unsafe { mem::transmute(address) }
     }
 }
 
 impl SharedAddress {
     #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn new(shmem_id: ShmemId, size: ObjectSize, offset: ObjectOffset) -> SharedAddress {
+    pub fn new(
+        shmem_id: ShmemId,
+        shmem_size: ObjectSize,
+        object_offset: ObjectOffset,
+    ) -> SharedAddress {
         SharedAddress {
-            shmem_id: shmem_id,
-            object_size: size,
+            shmem_id,
+            shmem_size,
+            object_offset,
             padding: 0,
-            object_offset: offset,
         }
-    }
-
-    #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn checked_add(self, size: ObjectSize) -> Option<SharedAddress> {
-        let address = self.to_u64()?;
-        let size = size.to_u64()?;
-        address.checked_add(size).and_then(SharedAddress::from_u64)
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
@@ -86,13 +71,32 @@ impl SharedAddress {
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn object_size(&self) -> ObjectSize {
-        self.object_size
+    pub fn shmem_size(&self) -> ObjectSize {
+        self.shmem_size
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
     pub fn object_offset(&self) -> ObjectOffset {
         self.object_offset
+    }
+
+    #[cfg_attr(feature = "no-panic", no_panic)]
+    pub fn checked_add(&self, size: ObjectSize) -> Option<SharedAddressRange> {
+        let end = ObjectSize::ceil(
+            self.object_offset
+                .to_usize()?
+                .checked_add(size.to_usize()?)?,
+        );
+        if end <= self.shmem_size {
+            Some(SharedAddressRange::new(
+                self.shmem_id,
+                self.shmem_size,
+                self.object_offset,
+                size,
+            ))
+        } else {
+            None
+        }
     }
 }
 

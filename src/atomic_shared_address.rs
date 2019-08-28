@@ -4,6 +4,8 @@
 
 use crate::ObjectSize;
 use crate::SharedAddress;
+use crate::SharedAddressRange;
+use crate::SharedMemRef;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 use shared_memory::SharedMemCast;
@@ -18,31 +20,33 @@ pub struct AtomicSharedAddress(AtomicU64);
 
 impl AtomicSharedAddress {
     #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn compare_and_swap(
-        &self,
-        current: Option<SharedAddress>,
-        new: Option<SharedAddress>,
-        order: Ordering,
-    ) -> Option<SharedAddress> {
-        let current = current
-            .as_ref()
-            .and_then(SharedAddress::to_u64)
-            .unwrap_or(0);
-        let new = new.as_ref().and_then(SharedAddress::to_u64).unwrap_or(0);
-        let bits = self.0.compare_and_swap(current, new, order);
-        SharedAddress::from_u64(bits)
+    pub fn load(&self, order: Ordering) -> SharedAddress {
+        SharedAddress::from(self.0.load(order))
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn fetch_add(&self, size: ObjectSize, order: Ordering) -> Option<SharedAddress> {
-        let size = size.to_u64()?;
-        let bits = self.0.fetch_add(size, order);
-        let result = SharedAddress::from_u64(bits);
+    pub fn compare_and_swap(
+        &self,
+        current: SharedAddress,
+        new: SharedAddress,
+        order: Ordering,
+    ) -> SharedAddress {
+        let current = u64::from(current);
+        let new = u64::from(new);
+        let result = self.0.compare_and_swap(current, new, order);
+        SharedAddress::from(result)
+    }
+
+    #[cfg_attr(feature = "no-panic", no_panic)]
+    pub fn fetch_add(&self, size: ObjectSize, order: Ordering) -> Option<SharedAddressRange> {
+        let address = SharedAddress::from(self.0.fetch_add(size.to_u64()?, order));
+        let result = address.checked_add(size);
         if result.is_none() {
-            self.0.fetch_sub(size, order);
+            self.0.fetch_sub(size.to_u64()?, order);
         }
         result
     }
 }
 
 unsafe impl SharedMemCast for AtomicSharedAddress {}
+unsafe impl SharedMemRef for AtomicSharedAddress {}

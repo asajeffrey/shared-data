@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use crate::SharedAddress;
+use crate::SharedAddressRange;
 use crate::SharedMemRef;
 use crate::ShmemAllocator;
 use crate::ALLOCATOR;
@@ -17,7 +17,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 pub struct SharedVec<T> {
-    address: SharedAddress,
+    address: SharedAddressRange,
     length: AtomicUsize,
     marker: PhantomData<T>,
 }
@@ -80,7 +80,7 @@ impl<T> SharedVec<T> {
         self.as_ptr_in(&ALLOCATOR)
     }
 
-    pub fn address(&self) -> SharedAddress {
+    pub fn address(&self) -> SharedAddressRange {
         self.address
     }
 

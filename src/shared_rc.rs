@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use crate::SharedAddress;
+use crate::SharedAddressRange;
 use crate::SharedBox;
 use crate::SharedMemRef;
 use crate::ShmemAllocator;
@@ -16,7 +16,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 pub struct SharedRc<T> {
-    address: SharedAddress,
+    address: SharedAddressRange,
     marker: PhantomData<T>,
 }
 
@@ -24,7 +24,7 @@ unsafe impl<T: SharedMemCast> SharedMemCast for SharedRc<T> {}
 unsafe impl<T: SharedMemCast> SharedMemRef for SharedRc<T> {}
 
 impl<T> SharedRc<T> {
-    fn from_address(address: SharedAddress) -> Self {
+    fn from_address(address: SharedAddressRange) -> Self {
         let marker = PhantomData;
         SharedRc { address, marker }
     }
@@ -56,7 +56,7 @@ impl<T> SharedRc<T> {
         SharedRc::try_new(data).expect("Failed to allocate shared Rc")
     }
 
-    pub fn address(&self) -> SharedAddress {
+    pub fn address(&self) -> SharedAddressRange {
         self.address
     }
 }

@@ -1,5 +1,5 @@
 use crate::tests::ChildId;
-use experiments::SharedAddress;
+use experiments::SharedAddressRange;
 use experiments::ALLOCATOR;
 #[cfg(not(test))]
 use num_traits::FromPrimitive;
@@ -14,7 +14,7 @@ use std::process::Command;
 
 // This code is run in the main test process
 #[cfg(test)]
-pub fn spawn_child(child_id: ChildId, address: SharedAddress) -> Child {
+pub fn spawn_child(child_id: ChildId, address: SharedAddressRange) -> Child {
     // Get the name of the shared memory
     let shmem_path = ALLOCATOR.shmem().get_os_path();
 
@@ -27,7 +27,7 @@ pub fn spawn_child(child_id: ChildId, address: SharedAddress) -> Child {
 
     // Convert the child_id and address to strings
     let child_name = child_id.to_usize().unwrap().to_string();
-    let address_name = address.to_usize().unwrap().to_string();
+    let address_name = u64::from(address).to_string();
 
     // Spawn a child process
     Command::new(exe_path)
@@ -50,7 +50,8 @@ pub fn child(shmem_path: String, child_name: String, address_name: String) {
 
     // Parse the child id and address
     let child_id = ChildId::from_usize(child_name.parse().unwrap()).unwrap();
-    let address = SharedAddress::from_u64(address_name.parse().unwrap()).unwrap();
+    let address_number: u64 = address_name.parse().unwrap();
+    let address = SharedAddressRange::from(address_number);
 
     // Run the child
     child_id.run(address);

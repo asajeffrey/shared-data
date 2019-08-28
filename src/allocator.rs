@@ -21,6 +21,7 @@ use crate::AtomicSharedAddress;
 use crate::ObjectOffset;
 use crate::ObjectSize;
 use crate::SharedAddress;
+use crate::SharedAddressRange;
 use crate::ShmemId;
 use crate::ShmemName;
 
@@ -34,7 +35,8 @@ struct ShmemMetadata {
     num_shmems: AtomicUsize,
     shmem_used: [AtomicBool; MAX_SHMEMS],
     shmem_names: [ShmemName; MAX_SHMEMS],
-    unused: [AtomicSharedAddress; 64],
+    unused: AtomicSharedAddress,
+    // TODO: add free lists
 }
 
 pub struct ShmemAllocator {
@@ -58,7 +60,7 @@ impl ShmemAllocator {
         let num_shmems = &mut (*metadata).num_shmems;
         let shmem_used = &mut (*metadata).shmem_used[0];
         let shmem_names = &mut (*metadata).shmem_names[0];
-        let unused = &mut (*metadata).unused[0];
+        let unused = &mut (*metadata).unused;
         let mut shmem_vec: Vec<AtomicPtr<SharedMem>> =
             iter::repeat_with(|| AtomicPtr::new(ptr::null_mut()))
                 .take(MAX_SHMEMS)
@@ -141,7 +143,7 @@ impl ShmemAllocator {
             }
         }
         debug!(
-            "Allocated shmem {} of size {} (requested {})",
+            "Allocated shmem {} of size {} (requested {:?})",
             index,
             (&*shmem_ptr).get_size(),
             size
@@ -164,60 +166,40 @@ impl ShmemAllocator {
         // TODO
     }
 
-    pub fn get_bytes(&self, address: SharedAddress) -> Option<*mut u8> {
+    pub fn get_bytes(&self, address: SharedAddressRange) -> Option<*mut u8> {
         let shmem = unsafe { self.get_shmem(address.shmem_id()) }?;
         let object_offset = address.object_offset().to_isize()?;
-        let object_end = object_offset as usize + address.object_size().to_usize()?;
-        if object_end <= shmem.get_size() {
-            Some(unsafe { shmem.get_ptr().offset(object_offset) as *mut u8 })
-        } else {
-            debug!("Out of range dereferncing {:?}", address);
+        let object_end = address.object_end()?.to_usize()?;
+        if object_end > shmem.get_size() {
             None
+        } else {
+            Some(unsafe { shmem.get_ptr().offset(object_offset) as *mut u8 })
         }
     }
 
-    pub unsafe fn alloc_bytes(&self, size: usize) -> Option<SharedAddress> {
+    pub unsafe fn alloc_bytes(&self, size: usize) -> Option<SharedAddressRange> {
         let object_size = ObjectSize::ceil(usize::max(MIN_OBJECT_SIZE, size));
-        let atomic_unused = &*self.unused.offset(object_size.0 as isize);
         loop {
-            let mut old_size = 0;
-            let unused = atomic_unused.fetch_add(object_size, Ordering::SeqCst);
-            let mut next_unused = None;
-            if let Some(unused) = unused {
-                next_unused = unused.checked_add(object_size);
-                if let Some(shmem) = self.get_shmem(unused.shmem_id()) {
-                    old_size = shmem.get_size();
-                    if let Some(next_unused) = next_unused {
-                        if let Some(offset) = next_unused.object_offset().to_usize() {
-                            if offset <= old_size {
-                                debug!("Using unused address {:?}..{:?}", unused, next_unused);
-                                return Some(unused);
-                            }
-                        }
-                    }
-                }
-            }
-            let new_shmem_size = usize::max(object_size.to_usize()?, old_size * 2);
-            let new_shmem_id = self.alloc_shmem(new_shmem_size)?;
-            let result = SharedAddress::new(new_shmem_id, object_size, ObjectOffset::default());
-            let new_unused = Some(SharedAddress::new(
-                new_shmem_id,
-                object_size,
-                ObjectOffset::from_u64(object_size.to_u64()?)?,
-            ));
-            if next_unused
-                == atomic_unused.compare_and_swap(next_unused, new_unused, Ordering::SeqCst)
-            {
-                debug!("Using fresh shem address {:?}", result);
+            if let Some(result) = (*self.unused).fetch_add(object_size, Ordering::SeqCst) {
                 return Some(result);
-            } else {
+            }
+            let old_unused = (*self.unused).load(Ordering::SeqCst);
+            let old_shmem = unsafe { self.get_shmem(old_unused.shmem_id()) };
+            let old_shmem_size = old_shmem.map(|shmem| shmem.get_size()).unwrap_or(0);
+            let new_shmem_size = ObjectSize::max(object_size, ObjectSize::ceil(old_shmem_size + 1));
+            let new_shmem_id = self.alloc_shmem(new_shmem_size.to_usize()?)?;
+            let object_offset = ObjectOffset::from_u64(0)?;
+            let new_unused = SharedAddress::new(new_shmem_id, new_shmem_size, object_offset);
+            if old_unused
+                != (*self.unused).compare_and_swap(old_unused, new_unused, Ordering::SeqCst)
+            {
                 self.free_shmem(new_shmem_id);
             }
         }
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
-    pub unsafe fn free_bytes(&self, _addr: SharedAddress) {
+    pub unsafe fn free_bytes(&self, _addr: SharedAddressRange) {
         // TODO
     }
 }

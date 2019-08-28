@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use crate::SharedAddress;
+use crate::SharedAddressRange;
 use crate::SharedMemRef;
 use crate::ShmemAllocator;
 use crate::ALLOCATOR;
@@ -13,7 +13,7 @@ use std::ops::Deref;
 use std::ptr;
 
 pub struct SharedBox<T> {
-    address: SharedAddress,
+    address: SharedAddressRange,
     marker: PhantomData<T>,
 }
 
@@ -57,7 +57,7 @@ impl<T> SharedBox<T> {
         unsafe { &*self.as_ptr() }
     }
 
-    pub fn address(&self) -> SharedAddress {
+    pub fn address(&self) -> SharedAddressRange {
         self.address
     }
 }

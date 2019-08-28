@@ -1,7 +1,7 @@
 #[cfg(test)]
 use crate::harness::spawn_child;
 #[cfg(not(test))]
-use experiments::SharedAddress;
+use experiments::SharedAddressRange;
 #[cfg(test)]
 use experiments::SharedBox;
 #[cfg(test)]
@@ -25,7 +25,7 @@ pub enum ChildId {
 // This is run in the child process, not the main test process
 #[cfg(not(test))]
 impl ChildId {
-    pub fn run(&self, address: SharedAddress) {
+    pub fn run(&self, address: SharedAddressRange) {
         match self {
             ChildId::Fail => run_fail(address),
             ChildId::Noop => run_noop(address),
@@ -37,11 +37,11 @@ impl ChildId {
 
 // A child process that does nothing
 #[cfg(not(test))]
-fn run_noop(_address: SharedAddress) {}
+fn run_noop(_address: SharedAddressRange) {}
 
 // A child process that fails
 #[cfg(not(test))]
-fn run_fail(_address: SharedAddress) {
+fn run_fail(_address: SharedAddressRange) {
     assert_eq!(1, 2);
 }
 
@@ -69,7 +69,7 @@ fn test_shared_box() {
 }
 
 #[cfg(not(test))]
-fn run_shared_box(_address: SharedAddress) {
+fn run_shared_box(_address: SharedAddressRange) {
     // TODO
 }
 
@@ -87,6 +87,6 @@ fn test_vector() {
 }
 
 #[cfg(not(test))]
-fn run_shared_vec(_address: SharedAddress) {
+fn run_shared_vec(_address: SharedAddressRange) {
     // TODO
 }
