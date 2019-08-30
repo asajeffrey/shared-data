@@ -4,7 +4,6 @@
 
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
-use shared_memory::SharedMemCast;
 
 #[cfg(feature = "no-panic")]
 use no_panic::no_panic;

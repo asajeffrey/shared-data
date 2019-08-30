@@ -12,17 +12,13 @@ use owning_ref::BoxRef;
 use owning_ref::OwningRef;
 use shared_memory::LockType;
 use shared_memory::SharedMem;
-use std::iter;
 use std::mem;
 use std::ops::Deref;
-use std::ptr;
 use std::sync::atomic::AtomicBool;
-use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 
-use crate::unsafe_code;
 use crate::AtomicSharedAddress;
 use crate::ObjectOffset;
 use crate::ObjectSize;

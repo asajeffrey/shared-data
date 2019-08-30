@@ -8,8 +8,6 @@ use crate::SharedAddress;
 use crate::ShmemId;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
-use shared_memory::SharedMemCast;
-use std::mem;
 
 #[cfg(feature = "no-panic")]
 use no_panic::no_panic;

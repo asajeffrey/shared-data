@@ -14,7 +14,6 @@ use std::convert::TryFrom;
 use std::marker::PhantomData;
 use std::mem;
 use std::ops::Deref;
-use std::ptr;
 
 pub struct SharedBox<T: SharedMemCast> {
     address: SharedAddressRange,

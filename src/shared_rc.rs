@@ -5,17 +5,12 @@
 use crate::SharedAddressRange;
 use crate::SharedBox;
 use crate::SharedMemRef;
-use crate::ShmemAllocator;
 use crate::Volatile;
-use crate::ALLOCATOR;
-use num_traits::ToPrimitive;
 use shared_memory::SharedMemCast;
 use std::convert::From;
 use std::convert::TryFrom;
-use std::marker::PhantomData;
 use std::mem;
 use std::ops::Deref;
-use std::ptr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 

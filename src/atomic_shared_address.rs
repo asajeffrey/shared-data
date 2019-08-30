@@ -5,10 +5,7 @@
 use crate::ObjectSize;
 use crate::SharedAddress;
 use crate::SharedAddressRange;
-use crate::SharedMemRef;
-use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
-use shared_memory::SharedMemCast;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 

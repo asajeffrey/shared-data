@@ -16,19 +16,18 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::AtomicPtr;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
 
 use crate::allocator::ShmemMetadata;
 use crate::shared_rc::SharedRcContents;
 use crate::AtomicSharedAddress;
 use crate::ObjectOffset;
 use crate::ObjectSize;
-use crate::ShmemId;
 use crate::SharedAddress;
 use crate::SharedAddressRange;
 use crate::SharedBox;
 use crate::SharedRc;
 use crate::SharedVec;
+use crate::ShmemId;
 use crate::ShmemName;
 
 // A marker trait for types that it's safe to take a reference to in shared memory
