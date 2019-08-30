@@ -51,6 +51,11 @@ impl SharedAddressRange {
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
+    pub fn null() -> SharedAddressRange {
+        SharedAddressRange::from(0)
+    }
+
+    #[cfg_attr(feature = "no-panic", no_panic)]
     pub fn shmem_id(self) -> ShmemId {
         self.shmem_id
     }

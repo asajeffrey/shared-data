@@ -6,6 +6,7 @@ use crate::SharedAddressRange;
 use crate::SharedBox;
 use crate::SharedMemRef;
 use crate::ShmemAllocator;
+use crate::Volatile;
 use crate::ALLOCATOR;
 use num_traits::ToPrimitive;
 use shared_memory::SharedMemCast;
@@ -18,38 +19,21 @@ use std::ptr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
-pub struct SharedRc<T> {
-    address: SharedAddressRange,
-    marker: PhantomData<T>,
+pub struct SharedRc<T: SharedMemCast>(SharedBox<SharedRcContents<T>>);
+
+// This is repr(C) to ensure that the data is placed at the beginning
+#[repr(C)]
+pub(crate) struct SharedRcContents<T: SharedMemCast> {
+    data: Volatile<T>,
+    ref_count: AtomicUsize,
 }
 
-impl<T> SharedRc<T> {
-    fn from_address(address: SharedAddressRange) -> Self {
-        let marker = PhantomData;
-        SharedRc { address, marker }
-    }
-
-    fn from_box(boxed: SharedBox<(T, AtomicUsize)>) -> Self {
-        let address = boxed.address();
-        mem::forget(boxed);
-        SharedRc::from_address(address)
-    }
-
-    fn as_box(&self) -> &SharedBox<(T, AtomicUsize)> {
-        unsafe { mem::transmute(self) }
-    }
-
-    fn into_box(self) -> SharedBox<(T, AtomicUsize)> {
-        unsafe { mem::transmute(self) }
-    }
-
-    fn ref_count(&self) -> &AtomicUsize {
-        unsafe { &self.as_box().unchecked_deref().1 }
-    }
-
+impl<T: SharedMemCast> SharedRc<T> {
     pub fn try_new(data: T) -> Option<SharedRc<T>> {
         let ref_count = AtomicUsize::new(1);
-        Some(SharedRc::from_box(SharedBox::try_new((data, ref_count))?))
+        let data = Volatile::new(data);
+        let contents = SharedRcContents { ref_count, data };
+        Some(SharedRc(SharedBox::new(contents)))
     }
 
     pub fn new(data: T) -> SharedRc<T> {
@@ -57,53 +41,44 @@ impl<T> SharedRc<T> {
     }
 
     pub fn address(&self) -> SharedAddressRange {
-        self.address
+        self.0.address()
     }
 }
 
-impl<T> TryFrom<SharedAddressRange> for SharedRc<T> {
+impl<T: SharedMemCast> TryFrom<SharedAddressRange> for SharedRc<T> {
     type Error = ();
     fn try_from(address: SharedAddressRange) -> Result<SharedRc<T>, ()> {
-        if mem::size_of::<(AtomicUsize, T)>() <= address.object_size().to_usize().ok_or(())? {
-            let result: SharedRc<T> = SharedRc {
-                address,
-                marker: PhantomData,
-            };
-            result.ref_count().fetch_add(1, Ordering::SeqCst);
-            Ok(result)
-        } else {
-            Err(())
-        }
+        Ok(SharedRc(SharedBox::try_from(address)?))
     }
 }
 
-impl<T> From<SharedRc<T>> for SharedAddressRange {
+impl<T: SharedMemCast> From<SharedRc<T>> for SharedAddressRange {
     fn from(rc: SharedRc<T>) -> SharedAddressRange {
-        let address = rc.address;
+        let address = rc.0.address();
         mem::forget(rc);
         address
     }
 }
 
-impl<T: SharedMemRef> Deref for SharedRc<T> {
+impl<T: SharedMemCast + SharedMemRef> Deref for SharedRc<T> {
     type Target = T;
     fn deref(&self) -> &T {
-        &self.as_box().0
+        self.0.data.deref()
     }
 }
 
-impl<T> Clone for SharedRc<T> {
+impl<T: SharedMemCast> Clone for SharedRc<T> {
     fn clone(&self) -> Self {
-        self.ref_count().fetch_add(1, Ordering::SeqCst);
-        SharedRc::from_address(self.address)
+        self.0.ref_count.fetch_add(1, Ordering::SeqCst);
+        SharedRc(SharedBox::unchecked_from_address(self.0.address()))
     }
 }
 
-impl<T> Drop for SharedRc<T> {
+impl<T: SharedMemCast> Drop for SharedRc<T> {
     fn drop(&mut self) {
-        let ref_count = self.ref_count().fetch_sub(1, Ordering::SeqCst);
-        if ref_count == 1 {
-            self.clone().into_box();
+        let ref_count = self.0.ref_count.fetch_sub(1, Ordering::SeqCst);
+        if ref_count > 1 {
+            self.0 = SharedBox::unchecked_from_address(SharedAddressRange::null())
         }
     }
 }

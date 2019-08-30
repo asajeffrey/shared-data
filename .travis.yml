@@ -15,5 +15,5 @@ before_script:
 script:
   - cargo fmt --all -- --check
   - cargo build
-  - cargo test -- --test-threads=1
+  - cargo test
   - if [ "$TRAVIS_OS_NAME" != "windows" ]; then cargo test --release --features=no-panic; fi

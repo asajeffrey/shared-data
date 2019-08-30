@@ -22,7 +22,7 @@ ipc = ["ipc-channel", "serde"]
 
 [dependencies]
 array-macro = "0.1"
-atomicbox = "0.2"
+atom = "0.3"
 owning_ref = "0.4"
 shared_memory = "0.8"
 rand = "0.7"

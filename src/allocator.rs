@@ -3,7 +3,7 @@
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
 use array_macro::array;
-use atomicbox::AtomicOptionBox;
+use atom::AtomSetOnce;
 use lazy_static::lazy_static;
 use log::debug;
 use num_traits::FromPrimitive;
@@ -24,7 +24,6 @@ use std::sync::Mutex;
 
 use crate::unsafe_code;
 use crate::AtomicSharedAddress;
-use crate::AtomicSharedMem;
 use crate::ObjectOffset;
 use crate::ObjectSize;
 use crate::SharedAddress;
@@ -37,7 +36,10 @@ use crate::Volatile;
 #[cfg(feature = "no-panic")]
 use no_panic::no_panic;
 
-const MAX_SHMEMS: usize = 10_000;
+// We double the size of the shared blocks each time we allocate one,
+// so we will run out of memory a long time before we run out of shared
+// memory blocks.
+const MAX_SHMEMS: usize = 64;
 const MIN_OBJECT_SIZE: usize = 8;
 
 pub(crate) struct ShmemMetadata {
@@ -63,7 +65,7 @@ impl ShmemMetadata {
 
 pub struct ShmemAllocator {
     // Locally we store the mmap'd memory slices
-    shmems: [AtomicSharedMem; MAX_SHMEMS],
+    shmems: [AtomSetOnce<Box<SyncSharedMem>>; MAX_SHMEMS],
     // The metadata is stored in shared memory
     metadata_shmem: BoxRef<SyncSharedMem, ShmemMetadata>,
 }
@@ -78,7 +80,7 @@ impl ShmemAllocator {
             })
             .ok()?;
         Some(ShmemAllocator {
-            shmems: array![AtomicSharedMem::new(); MAX_SHMEMS],
+            shmems: array![AtomSetOnce::empty(); MAX_SHMEMS],
             metadata_shmem,
         })
     }
@@ -90,7 +92,7 @@ impl ShmemAllocator {
         let shmem = SyncSharedMem::from_shmem(shmem);
         let metadata = ShmemMetadata::new(shmem_name);
         let volatile_metadata = Volatile::<ShmemMetadata>::from_volatile_bytes(&*shmem)?;
-        volatile_metadata.set(metadata);
+        volatile_metadata.write_volatile(metadata);
         ShmemAllocator::from_shmem(shmem)
     }
 
@@ -106,7 +108,7 @@ impl ShmemAllocator {
     }
 
     pub fn name(&self) -> ShmemName {
-        self.metadata().name.get()
+        self.metadata().name.read_volatile()
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
@@ -126,22 +128,23 @@ impl ShmemAllocator {
         {
             None
         } else {
-            Some(self.metadata().shmem_names.get(index)?.get())
+            Some(self.metadata().shmem_names.get(index)?.read_volatile())
         }
     }
 
     // I'd like to be able to mark this as `no_panic` but unfortunately
     // the shared memory crate can panic when opening a shared memory file.
-    fn get_shmem(&self, shmem_id: ShmemId) -> Option<&[Volatile<u8>]> {
+    fn get_shmem(&self, shmem_id: ShmemId) -> Option<&SyncSharedMem> {
         let index = shmem_id.to_usize()?;
         let atomic_shmem = self.shmems.get(index)?;
-        if let Some(shmem) = atomic_shmem.as_slice() {
+        if let Some(shmem) = atomic_shmem.get() {
             return Some(shmem);
         }
         let shmem_name = self.get_shmem_name(shmem_id)?;
         let new_shmem = SharedMem::open(shmem_name.as_str()).ok()?;
-        atomic_shmem.init(new_shmem);
-        atomic_shmem.as_slice()
+        let new_boxed_shmem = Box::new(SyncSharedMem::from_shmem(new_shmem));
+        atomic_shmem.set_if_none(new_boxed_shmem);
+        atomic_shmem.get()
     }
 
     // I'd like to be able to mark this as `no_panic` but unfortunately
@@ -149,6 +152,7 @@ impl ShmemAllocator {
     fn alloc_shmem(&self, size: usize) -> Option<ShmemId> {
         let shmem = SharedMem::create(LockType::Mutex, size).ok()?;
         let shmem_name = ShmemName::from_str(shmem.get_os_path())?;
+        let boxed_shmem = Box::new(SyncSharedMem::from_shmem(shmem));
         let mut index = self.metadata().num_shmems.load(Ordering::Relaxed);
         while self
             .metadata()
@@ -165,11 +169,14 @@ impl ShmemAllocator {
         debug!(
             "Allocated shmem {} of size {} (requested {:?})",
             index,
-            shmem.get_size(),
+            boxed_shmem.len(),
             size
         );
-        self.metadata().shmem_names.get(index)?.set(shmem_name);
-        self.shmems.get(index)?.init(shmem);
+        self.metadata()
+            .shmem_names
+            .get(index)?
+            .write_volatile(shmem_name);
+        self.shmems.get(index)?.set_if_none(boxed_shmem);
         self.metadata().num_shmems.fetch_add(1, Ordering::SeqCst);
         ShmemId::from_usize(index)
     }
