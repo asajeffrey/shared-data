@@ -127,6 +127,20 @@ impl<T: SharedMemCast> Volatile<T> {
         }
     }
 
+    pub fn slice_from_volatile_bytes(
+        bytes: &[Volatile<u8>],
+        length: usize,
+    ) -> Option<&[Volatile<T>]> {
+        unsafe {
+            if mem::size_of::<T>() * length <= bytes.len() {
+                let ptr = bytes.as_ptr() as *const Volatile<T>;
+                Some(slice::from_raw_parts(ptr, length))
+            } else {
+                None
+            }
+        }
+    }
+
     pub fn as_ptr(&self) -> *mut T {
         self.0.get()
     }
@@ -140,14 +154,6 @@ impl<T: SharedMemCast> Volatile<T> {
             self.as_ptr().write_volatile(value);
         }
     }
-
-    pub fn swap(&self, value: T) -> T {
-        unsafe {
-            let result = self.as_ptr().read_volatile();
-            self.as_ptr().write_volatile(value);
-            result
-        }
-    }
 }
 
 impl<T: SharedMemCast + SharedMemRef> Deref for Volatile<T> {
@@ -155,4 +161,12 @@ impl<T: SharedMemCast + SharedMemRef> Deref for Volatile<T> {
     fn deref(&self) -> &T {
         unsafe { &*self.as_ptr() }
     }
+}
+
+pub fn slice_from_volatile<T: SharedMemCast + SharedMemRef>(slice: &[Volatile<T>]) -> &[T] {
+    unsafe { mem::transmute(slice) }
+}
+
+pub fn slice_empty<'a, T: 'a>() -> &'a [T] {
+    unsafe { slice::from_raw_parts(ptr::NonNull::dangling().as_ptr(), 0) }
 }

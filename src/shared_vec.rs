@@ -2,9 +2,11 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+use crate::unsafe_code;
 use crate::SharedAddressRange;
 use crate::SharedMemRef;
 use crate::ShmemAllocator;
+use crate::Volatile;
 use crate::ALLOCATOR;
 use log::debug;
 use shared_memory::SharedMemCast;
@@ -16,16 +18,14 @@ use std::slice;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
-pub struct SharedVec<T> {
+pub struct SharedVec<T: SharedMemCast> {
     address: SharedAddressRange,
     length: AtomicUsize,
     marker: PhantomData<T>,
 }
 
-impl<T> SharedVec<T> {
-    // This is unsafe because if you create in one allocator and read from another
-    // then you can get UB.
-    pub unsafe fn from_iter_in<C>(collection: C, alloc: &ShmemAllocator) -> Option<SharedVec<T>>
+impl<T: SharedMemCast> SharedVec<T> {
+    pub fn from_iter_in<C>(collection: C, alloc: &ShmemAllocator) -> Option<SharedVec<T>>
     where
         C: IntoIterator<Item = T>,
         C::IntoIter: ExactSizeIterator,
@@ -35,10 +35,11 @@ impl<T> SharedVec<T> {
         debug!("Allocating vector of length {}", length);
         let size = mem::size_of::<T>() * length;
         let address = alloc.alloc_bytes(size)?;
-        let ptr = alloc.get_bytes(address)?.as_ptr() as *mut T;
+        let bytes = alloc.get_bytes(address)?;
+        let slice = Volatile::<T>::slice_from_volatile_bytes(bytes, length)?;
         debug!("Initializing vector");
-        for (index, item) in iter.enumerate() {
-            ptr.offset(index as isize).write_volatile(item);
+        for (item, volatile) in iter.zip(slice) {
+            volatile.write_volatile(item);
         }
         let length = AtomicUsize::new(length);
         let marker = PhantomData;
@@ -63,7 +64,7 @@ impl<T> SharedVec<T> {
         C: IntoIterator<Item = T>,
         C::IntoIter: ExactSizeIterator,
     {
-        unsafe { SharedVec::from_iter_in(collection, &ALLOCATOR) }
+        SharedVec::from_iter_in(collection, &ALLOCATOR)
     }
 
     pub fn from_iter<C>(collection: C) -> SharedVec<T>
@@ -78,6 +79,16 @@ impl<T> SharedVec<T> {
         self.as_ptr_in(&ALLOCATOR)
     }
 
+    pub fn get_in<'a>(&'a self, alloc: &'a ShmemAllocator) -> Option<&'a [Volatile<T>]> {
+        let bytes = alloc.get_bytes(self.address)?;
+        let length = self.length.load(Ordering::SeqCst);
+        Volatile::slice_from_volatile_bytes(bytes, length)
+    }
+
+    pub fn try_get(&self) -> Option<&[Volatile<T>]> {
+        self.get_in(&ALLOCATOR)
+    }
+
     pub fn address(&self) -> SharedAddressRange {
         self.address
     }
@@ -87,14 +98,18 @@ impl<T> SharedVec<T> {
     }
 }
 
-impl<T: SharedMemRef> Deref for SharedVec<T> {
+impl<T: SharedMemCast + SharedMemRef> Deref for SharedVec<T> {
     type Target = [T];
     fn deref(&self) -> &[T] {
-        unsafe { slice::from_raw_parts(self.as_ptr(), self.len()) }
+        if let Some(volatile) = self.try_get() {
+            unsafe_code::slice_from_volatile(volatile)
+        } else {
+            unsafe_code::slice_empty()
+        }
     }
 }
 
-impl<T> Drop for SharedVec<T> {
+impl<T: SharedMemCast> Drop for SharedVec<T> {
     fn drop(&mut self) {
         // TODO
     }
