@@ -1,5 +1,6 @@
-# ipc-experiments
+# shared-data
 
-[![Build Status](https://travis-ci.com/asajeffrey/ipc-experiments.svg?branch=master)](https://travis-ci.com/asajeffrey/ipc-experiments)
+[![Build Status](https://travis-ci.com/asajeffrey/shared-data.svg?branch=master)](https://travis-ci.com/asajeffrey/shared-data)
 
-Experiments with IPC perf
+A library for data structures living in shared memory.
+

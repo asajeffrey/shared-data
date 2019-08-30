@@ -1,6 +1,6 @@
 [package]
-name = "ipc-experiments"
-version = "0.1.0"
+name = "shared-data"
+version = "0.0.1"
 authors = ["Alan Jeffrey <ajeffrey@mozilla.com>"]
 edition = "2018"
 
