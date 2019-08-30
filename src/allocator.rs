@@ -240,8 +240,19 @@ lazy_static! {
     };
 }
 
-pub fn bootstrap(name: String) {
+/// Sets the name for the shared memory used to bootstrap the allocator.
+///
+/// Does nothing if the allocatpr has already been used.
+pub fn set_bootstrap_name(name: String) {
     if let Ok(mut allocator_name) = ALLOCATOR_NAME.lock() {
         *allocator_name = Some(name);
     }
+}
+
+/// Gets the name for the shared memory used to bootstrap the allocator.
+///
+/// This can be called in one process and passed to another, at which point they share an allocator,
+/// and can communicate using shared data.
+pub fn get_bootstrap_name() -> String {
+    String::from(ALLOCATOR.name().as_str())
 }

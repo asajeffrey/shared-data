@@ -17,6 +17,7 @@ use std::ptr;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
+/// An owned pointer into an array of shared memory.
 pub struct SharedVec<T: SharedMemCast> {
     address: SharedAddressRange,
     length: AtomicUsize,
@@ -24,8 +25,7 @@ pub struct SharedVec<T: SharedMemCast> {
 }
 
 impl<T: SharedMemCast> SharedVec<T> {
-    pub fn from_iter_in<C>(collection: C, alloc: &ShmemAllocator) -> Option<SharedVec<T>>
-    where
+    pub(crate) fn from_iter_in<C>(collection: C, alloc: &ShmemAllocator) -> Option<SharedVec<T>> where
         C: IntoIterator<Item = T>,
         C::IntoIter: ExactSizeIterator,
     {
@@ -49,9 +49,7 @@ impl<T: SharedMemCast> SharedVec<T> {
         })
     }
 
-    // If you create in one allocator and read from another
-    // then you can get an invalid pointer.
-    pub fn as_ptr_in(&self, alloc: &ShmemAllocator) -> *mut T {
+    pub(crate) fn as_ptr_in(&self, alloc: &ShmemAllocator) -> *mut T {
         alloc
             .get_bytes(self.address)
             .map(|bytes| bytes.as_ptr() as *mut T)
@@ -78,7 +76,7 @@ impl<T: SharedMemCast> SharedVec<T> {
         self.as_ptr_in(&ALLOCATOR)
     }
 
-    pub fn get_in<'a>(&'a self, alloc: &'a ShmemAllocator) -> Option<&'a [Volatile<T>]> {
+    pub(crate) fn get_in<'a>(&'a self, alloc: &'a ShmemAllocator) -> Option<&'a [Volatile<T>]> {
         let bytes = alloc.get_bytes(self.address)?;
         let length = self.length.load(Ordering::SeqCst);
         Volatile::slice_from_volatile_bytes(bytes, length)
@@ -86,6 +84,10 @@ impl<T: SharedMemCast> SharedVec<T> {
 
     pub fn try_get(&self) -> Option<&[Volatile<T>]> {
         self.get_in(&ALLOCATOR)
+    }
+
+    pub fn get(&self) -> &[Volatile<T>] {
+        self.try_get().expect("Failed to deref shared vec")
     }
 
     pub fn address(&self) -> SharedAddressRange {

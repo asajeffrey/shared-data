@@ -19,19 +19,22 @@ mod shmem_name;
 // All unsafe code lives here
 mod unsafe_code;
 
-pub use allocator::bootstrap;
-pub use allocator::ShmemAllocator;
-pub use allocator::ALLOCATOR;
-pub use atomic_shared_address::AtomicSharedAddress;
-pub use object_offset::ObjectOffset;
-pub use object_size::ObjectSize;
-pub use shared_address::SharedAddress;
+pub use allocator::get_bootstrap_name;
+pub use allocator::set_bootstrap_name;
 pub use shared_address_range::SharedAddressRange;
 pub use shared_box::SharedBox;
 pub use shared_rc::SharedRc;
 pub use shared_vec::SharedVec;
-pub use shmem_id::ShmemId;
-pub use shmem_name::ShmemName;
 pub use unsafe_code::SharedMemRef;
-pub use unsafe_code::SyncSharedMem;
 pub use unsafe_code::Volatile;
+
+// Should these be publicly exported
+pub(crate) use allocator::ShmemAllocator;
+pub(crate) use allocator::ALLOCATOR;
+pub(crate) use atomic_shared_address::AtomicSharedAddress;
+pub(crate) use object_offset::ObjectOffset;
+pub(crate) use object_size::ObjectSize;
+pub(crate) use shared_address::SharedAddress;
+pub(crate) use shmem_id::ShmemId;
+pub(crate) use shmem_name::ShmemName;
+pub(crate) use unsafe_code::SyncSharedMem;

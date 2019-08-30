@@ -4,7 +4,6 @@
 
 use crate::ObjectOffset;
 use crate::ObjectSize;
-use crate::SharedAddress;
 use crate::ShmemId;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
@@ -12,6 +11,7 @@ use num_traits::ToPrimitive;
 #[cfg(feature = "no-panic")]
 use no_panic::no_panic;
 
+/// A range of addresses in shared memory, packed into 64 bits.
 #[derive(Clone, Copy, Eq, Debug, PartialEq)]
 pub struct SharedAddressRange {
     shmem_id: ShmemId,
@@ -22,7 +22,7 @@ pub struct SharedAddressRange {
 
 impl SharedAddressRange {
     #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn new(
+    pub(crate) fn new(
         shmem_id: ShmemId,
         shmem_size: ObjectSize,
         object_offset: ObjectOffset,
@@ -42,35 +42,26 @@ impl SharedAddressRange {
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn shmem_id(self) -> ShmemId {
+    pub(crate) fn shmem_id(self) -> ShmemId {
         self.shmem_id
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn object_size(&self) -> ObjectSize {
+    pub(crate) fn object_size(&self) -> ObjectSize {
         self.object_size
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn object_offset(&self) -> ObjectOffset {
+    pub(crate) fn object_offset(&self) -> ObjectOffset {
         self.object_offset
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn object_end(&self) -> Option<ObjectOffset> {
+    pub(crate) fn object_end(&self) -> Option<ObjectOffset> {
         ObjectOffset::from_u64(
             self.object_offset
                 .to_u64()?
                 .checked_add(self.object_size.to_u64()?)?,
         )
-    }
-
-    #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn end_address(&self) -> Option<SharedAddress> {
-        Some(SharedAddress::new(
-            self.shmem_id,
-            self.shmem_size,
-            self.object_end()?,
-        ))
     }
 }

@@ -15,13 +15,14 @@ use std::marker::PhantomData;
 use std::mem;
 use std::ops::Deref;
 
+/// An owned pointer into shared memory.
 pub struct SharedBox<T: SharedMemCast> {
     address: SharedAddressRange,
     marker: PhantomData<T>,
 }
 
 impl<T: SharedMemCast> SharedBox<T> {
-    pub fn new_in(data: T, alloc: &ShmemAllocator) -> Option<SharedBox<T>> {
+    pub(crate) fn new_in(data: T, alloc: &ShmemAllocator) -> Option<SharedBox<T>> {
         let size = mem::size_of::<T>();
         let address = alloc.alloc_bytes(size)?;
         let bytes = alloc.get_bytes(address)?;
@@ -31,32 +32,38 @@ impl<T: SharedMemCast> SharedBox<T> {
         Some(SharedBox { address, marker })
     }
 
-    pub fn get_in<'a>(&'a self, alloc: &'a ShmemAllocator) -> Option<&'a Volatile<T>> {
+    pub(crate) fn get_in<'a>(&'a self, alloc: &'a ShmemAllocator) -> Option<&'a Volatile<T>> {
         let bytes = alloc.get_bytes(self.address)?;
         Volatile::from_volatile_bytes(bytes)
     }
 
+    /// Allocates a new box in shared memory, returning `None` if allocation failed.
     pub fn try_new(data: T) -> Option<SharedBox<T>> {
         SharedBox::new_in(data, &ALLOCATOR)
     }
 
+    /// Allocates a new box in shared memory, panicing if allocation failed.
     pub fn new(data: T) -> SharedBox<T> {
         SharedBox::try_new(data).expect("Failed to allocate shared box")
     }
 
+    /// Accesses a box in shared memory, returning `None` if the box refers to inaccessible memory.
     pub fn try_get(&self) -> Option<&Volatile<T>> {
         self.get_in(&ALLOCATOR)
     }
 
+    /// Accesses a box in shared memory, panicing if the box refers to inaccessible memory.
     pub fn get(&self) -> &Volatile<T> {
         self.try_get().expect("Failed to deref shared box")
     }
 
+    /// The shared address of the box.
     pub fn address(&self) -> SharedAddressRange {
         self.address
     }
 
-    pub fn unchecked_from_address(address: SharedAddressRange) -> SharedBox<T> {
+    /// Create a box from a shared address.
+    pub(crate) fn unchecked_from_address(address: SharedAddressRange) -> SharedBox<T> {
         SharedBox {
             address,
             marker: PhantomData,

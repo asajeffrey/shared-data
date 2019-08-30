@@ -1,10 +1,9 @@
 use crate::tests::ChildId;
-use shared_data::SharedAddressRange;
-use shared_data::ALLOCATOR;
 #[cfg(not(test))]
 use num_traits::FromPrimitive;
 #[cfg(test)]
 use num_traits::ToPrimitive;
+use shared_data::SharedAddressRange;
 #[cfg(test)]
 use std::env;
 #[cfg(test)]
@@ -16,7 +15,7 @@ use std::process::Command;
 #[cfg(test)]
 pub fn spawn_child(child_id: ChildId, address: SharedAddressRange) -> Child {
     // Get the name of the shared memory
-    let shmem_name = ALLOCATOR.name();
+    let shmem_name = shared_data::get_bootstrap_name();
 
     // The executable for the child process, which does nothing
     // but call back here. Assumes the layout of the target directory a bit.
@@ -42,11 +41,11 @@ pub fn spawn_child(child_id: ChildId, address: SharedAddressRange) -> Child {
 #[cfg(not(test))]
 pub fn child(shmem_path: String, child_name: String, address_name: String) {
     // Bootstrap the shared memory
-    shared_data::bootstrap(shmem_path.clone());
+    shared_data::set_bootstrap_name(shmem_path.clone());
 
     // Double-check that the allocator has been configured
     // with the right path
-    assert_eq!(ALLOCATOR.name().as_str(), shmem_path);
+    assert_eq!(shared_data::get_bootstrap_name(), shmem_path);
 
     // Parse the child id and address
     let child_id = ChildId::from_usize(child_name.parse().unwrap()).unwrap();

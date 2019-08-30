@@ -14,6 +14,7 @@ use std::ops::Deref;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
+/// An reference counted pointer into shared memory.
 pub struct SharedRc<T: SharedMemCast>(SharedBox<SharedRcContents<T>>);
 
 // This is repr(C) to ensure that the data is placed at the beginning

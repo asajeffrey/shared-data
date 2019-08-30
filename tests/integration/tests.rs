@@ -1,13 +1,13 @@
 #[cfg(test)]
 use crate::harness::spawn_child;
+use num_derive::FromPrimitive;
+use num_derive::ToPrimitive;
 #[cfg(not(test))]
 use shared_data::SharedAddressRange;
 #[cfg(test)]
 use shared_data::SharedBox;
 #[cfg(test)]
 use shared_data::SharedVec;
-use num_derive::FromPrimitive;
-use num_derive::ToPrimitive;
 #[cfg(test)]
 use std::sync::atomic::AtomicUsize;
 #[cfg(test)]
