@@ -5,7 +5,6 @@
 // #![deny(unsafe_code)]
 
 mod allocator;
-mod atomic_shared;
 mod atomic_shared_address;
 mod object_offset;
 mod object_size;
@@ -23,7 +22,6 @@ mod unsafe_code;
 pub use allocator::bootstrap;
 pub use allocator::ShmemAllocator;
 pub use allocator::ALLOCATOR;
-pub use atomic_shared::AtomicShared;
 pub use atomic_shared_address::AtomicSharedAddress;
 pub use object_offset::ObjectOffset;
 pub use object_size::ObjectSize;
