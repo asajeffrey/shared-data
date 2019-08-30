@@ -47,5 +47,3 @@ impl ObjectSize {
         ObjectSize(63 - size.leading_zeros() as u8)
     }
 }
-
-unsafe impl SharedMemCast for ObjectSize {}

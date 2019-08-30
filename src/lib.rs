@@ -2,7 +2,7 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-// #![deny(unsafe_code)]
+#![deny(unsafe_code)]
 
 mod allocator;
 mod atomic_shared_address;

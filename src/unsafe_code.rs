@@ -21,6 +21,9 @@ use std::sync::atomic::Ordering;
 use crate::allocator::ShmemMetadata;
 use crate::shared_rc::SharedRcContents;
 use crate::AtomicSharedAddress;
+use crate::ObjectOffset;
+use crate::ObjectSize;
+use crate::ShmemId;
 use crate::SharedAddress;
 use crate::SharedAddressRange;
 use crate::SharedBox;
@@ -90,6 +93,9 @@ unsafe impl<T: SharedMemCast> SharedMemRef for SharedVec<T> {}
 unsafe impl SharedMemCast for AtomicSharedAddress {}
 unsafe impl SharedMemRef for AtomicSharedAddress {}
 
+unsafe impl SharedMemCast for ObjectOffset {}
+unsafe impl SharedMemCast for ObjectSize {}
+unsafe impl SharedMemCast for ShmemId {}
 unsafe impl SharedMemCast for ShmemName {}
 unsafe impl SharedMemCast for SharedAddress {}
 
