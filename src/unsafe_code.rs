@@ -21,6 +21,7 @@ use std::sync::atomic::Ordering;
 use crate::allocator::ShmemMetadata;
 use crate::shared_rc::SharedRcContents;
 use crate::SharedAddress;
+use crate::SharedAddressRange;
 use crate::SharedBox;
 use crate::SharedRc;
 use crate::SharedVec;
@@ -181,6 +182,18 @@ impl From<u64> for SharedAddress {
 
 impl From<SharedAddress> for u64 {
     fn from(address: SharedAddress) -> u64 {
+        unsafe { mem::transmute(address) }
+    }
+}
+
+impl From<u64> for SharedAddressRange {
+    fn from(data: u64) -> SharedAddressRange {
+        unsafe { mem::transmute(data) }
+    }
+}
+
+impl From<SharedAddressRange> for u64 {
+    fn from(address: SharedAddressRange) -> u64 {
         unsafe { mem::transmute(address) }
     }
 }

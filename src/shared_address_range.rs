@@ -22,18 +22,6 @@ pub struct SharedAddressRange {
     object_size: ObjectSize,
 }
 
-impl From<u64> for SharedAddressRange {
-    fn from(data: u64) -> SharedAddressRange {
-        unsafe { mem::transmute(data) }
-    }
-}
-
-impl From<SharedAddressRange> for u64 {
-    fn from(address: SharedAddressRange) -> u64 {
-        unsafe { mem::transmute(address) }
-    }
-}
-
 impl SharedAddressRange {
     #[cfg_attr(feature = "no-panic", no_panic)]
     pub fn new(
@@ -88,5 +76,3 @@ impl SharedAddressRange {
         ))
     }
 }
-
-unsafe impl SharedMemCast for SharedAddressRange {}
