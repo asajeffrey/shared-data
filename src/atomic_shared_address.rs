@@ -47,6 +47,3 @@ impl AtomicSharedAddress {
         result
     }
 }
-
-unsafe impl SharedMemCast for AtomicSharedAddress {}
-unsafe impl SharedMemRef for AtomicSharedAddress {}
