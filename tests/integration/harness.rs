@@ -16,7 +16,7 @@ use std::process::Command;
 #[cfg(test)]
 pub fn spawn_child(child_id: ChildId, address: SharedAddressRange) -> Child {
     // Get the name of the shared memory
-    let shmem_path = ALLOCATOR.shmem().get_os_path();
+    let shmem_name = ALLOCATOR.name();
 
     // The executable for the child process, which does nothing
     // but call back here. Assumes the layout of the target directory a bit.
@@ -31,7 +31,7 @@ pub fn spawn_child(child_id: ChildId, address: SharedAddressRange) -> Child {
 
     // Spawn a child process
     Command::new(exe_path)
-        .arg(shmem_path)
+        .arg(shmem_name)
         .arg(child_name)
         .arg(address_name)
         .spawn()
@@ -46,7 +46,7 @@ pub fn child(shmem_path: String, child_name: String, address_name: String) {
 
     // Double-check that the allocator has been configured
     // with the right path
-    assert_eq!(ALLOCATOR.shmem().get_os_path(), shmem_path);
+    assert_eq!(ALLOCATOR.name().as_str(), shmem_path);
 
     // Parse the child id and address
     let child_id = ChildId::from_usize(child_name.parse().unwrap()).unwrap();

@@ -20,18 +20,13 @@ pub struct SharedBox<T> {
     marker: PhantomData<T>,
 }
 
-unsafe impl<T: SharedMemCast> SharedMemCast for SharedBox<T> {}
-unsafe impl<T: SharedMemCast> SharedMemRef for SharedBox<T> {}
-unsafe impl<T: Sync> Sync for SharedBox<T> {}
-unsafe impl<T: Send> Send for SharedBox<T> {}
-
 impl<T> SharedBox<T> {
     // This is unsafe because if you create in one allocator and read from another
     // then you can get UB.
     pub unsafe fn new_in(data: T, alloc: &ShmemAllocator) -> Option<SharedBox<T>> {
         let size = mem::size_of::<T>();
         let address = alloc.alloc_bytes(size)?;
-        let ptr = alloc.get_bytes(address)? as *mut T;
+        let ptr = alloc.get_bytes(address)?.as_ptr() as *mut T;
         ptr.write_volatile(data);
         let marker = PhantomData;
         Some(SharedBox { address, marker })
@@ -40,7 +35,10 @@ impl<T> SharedBox<T> {
     // If you create in one allocator and read from another
     // then you can get an invalid pointer.
     pub fn as_ptr_in(&self, alloc: &ShmemAllocator) -> *mut T {
-        alloc.get_bytes(self.address).unwrap_or(ptr::null_mut()) as *mut T
+        alloc
+            .get_bytes(self.address)
+            .map(|bytes| bytes.as_ptr() as *mut T)
+            .unwrap_or(ptr::null_mut())
     }
 
     pub fn try_new(data: T) -> Option<SharedBox<T>> {
@@ -57,7 +55,7 @@ impl<T> SharedBox<T> {
 
     // This is unsafe because T might not implement SharedMemRef.
     pub unsafe fn unchecked_deref(&self) -> &T {
-        unsafe { &*self.as_ptr() }
+        &*self.as_ptr()
     }
 
     pub fn address(&self) -> SharedAddressRange {

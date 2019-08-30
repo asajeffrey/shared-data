@@ -2,6 +2,8 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
+// #[deny(unsafe_code)]
+
 mod allocator;
 mod atomic_shared;
 mod atomic_shared_address;
@@ -15,6 +17,9 @@ mod shared_rc;
 mod shared_vec;
 mod shmem_id;
 mod shmem_name;
+
+// All unsafe code lives here
+mod unsafe_code;
 
 pub use allocator::bootstrap;
 pub use allocator::ShmemAllocator;
@@ -31,3 +36,6 @@ pub use shared_rc::SharedRc;
 pub use shared_vec::SharedVec;
 pub use shmem_id::ShmemId;
 pub use shmem_name::ShmemName;
+pub use unsafe_code::AtomicSharedMem;
+pub use unsafe_code::SyncSharedMem;
+pub use unsafe_code::Volatile;

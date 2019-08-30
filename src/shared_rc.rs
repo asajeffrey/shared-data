@@ -23,9 +23,6 @@ pub struct SharedRc<T> {
     marker: PhantomData<T>,
 }
 
-unsafe impl<T: SharedMemCast> SharedMemCast for SharedRc<T> {}
-unsafe impl<T: SharedMemCast> SharedMemRef for SharedRc<T> {}
-
 impl<T> SharedRc<T> {
     fn from_address(address: SharedAddressRange) -> Self {
         let marker = PhantomData;

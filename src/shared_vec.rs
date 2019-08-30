@@ -22,11 +22,6 @@ pub struct SharedVec<T> {
     marker: PhantomData<T>,
 }
 
-unsafe impl<T: SharedMemCast> SharedMemCast for SharedVec<T> {}
-unsafe impl<T: SharedMemCast> SharedMemRef for SharedVec<T> {}
-unsafe impl<T: Sync> Sync for SharedVec<T> {}
-unsafe impl<T: Send> Send for SharedVec<T> {}
-
 impl<T> SharedVec<T> {
     // This is unsafe because if you create in one allocator and read from another
     // then you can get UB.
@@ -40,7 +35,7 @@ impl<T> SharedVec<T> {
         debug!("Allocating vector of length {}", length);
         let size = mem::size_of::<T>() * length;
         let address = alloc.alloc_bytes(size)?;
-        let ptr = alloc.get_bytes(address)? as *mut T;
+        let ptr = alloc.get_bytes(address)?.as_ptr() as *mut T;
         debug!("Initializing vector");
         for (index, item) in iter.enumerate() {
             ptr.offset(index as isize).write_volatile(item);
@@ -57,7 +52,10 @@ impl<T> SharedVec<T> {
     // If you create in one allocator and read from another
     // then you can get an invalid pointer.
     pub fn as_ptr_in(&self, alloc: &ShmemAllocator) -> *mut T {
-        alloc.get_bytes(self.address).unwrap_or(ptr::null_mut()) as *mut T
+        alloc
+            .get_bytes(self.address)
+            .map(|bytes| bytes.as_ptr() as *mut T)
+            .unwrap_or(ptr::null_mut())
     }
 
     pub fn try_from_iter<C>(collection: C) -> Option<SharedVec<T>>
