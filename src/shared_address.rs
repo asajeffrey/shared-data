@@ -38,18 +38,6 @@ pub struct SharedAddress {
     shmem_id: ShmemId,
 }
 
-impl From<u64> for SharedAddress {
-    fn from(data: u64) -> SharedAddress {
-        unsafe { mem::transmute(data) }
-    }
-}
-
-impl From<SharedAddress> for u64 {
-    fn from(address: SharedAddress) -> u64 {
-        unsafe { mem::transmute(address) }
-    }
-}
-
 impl SharedAddress {
     #[cfg_attr(feature = "no-panic", no_panic)]
     pub fn new(
@@ -99,5 +87,3 @@ impl SharedAddress {
         }
     }
 }
-
-unsafe impl SharedMemCast for SharedAddress {}

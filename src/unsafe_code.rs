@@ -20,6 +20,7 @@ use std::sync::atomic::Ordering;
 
 use crate::allocator::ShmemMetadata;
 use crate::shared_rc::SharedRcContents;
+use crate::SharedAddress;
 use crate::SharedBox;
 use crate::SharedRc;
 use crate::SharedVec;
@@ -85,6 +86,7 @@ unsafe impl<T: SharedMemCast> SharedMemCast for SharedVec<T> {}
 unsafe impl<T: SharedMemCast> SharedMemRef for SharedVec<T> {}
 
 unsafe impl SharedMemCast for ShmemName {}
+unsafe impl SharedMemCast for SharedAddress {}
 
 unsafe impl<T: Send> Sync for Volatile<T> {}
 
@@ -169,4 +171,16 @@ pub fn slice_from_volatile<T: SharedMemCast + SharedMemRef>(slice: &[Volatile<T>
 
 pub fn slice_empty<'a, T: 'a>() -> &'a [T] {
     unsafe { slice::from_raw_parts(ptr::NonNull::dangling().as_ptr(), 0) }
+}
+
+impl From<u64> for SharedAddress {
+    fn from(data: u64) -> SharedAddress {
+        unsafe { mem::transmute(data) }
+    }
+}
+
+impl From<SharedAddress> for u64 {
+    fn from(address: SharedAddress) -> u64 {
+        unsafe { mem::transmute(address) }
+    }
 }
