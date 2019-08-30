@@ -5,7 +5,6 @@ authors = ["Alan Jeffrey <ajeffrey@mozilla.com>"]
 edition = "2018"
 
 [lib]
-name = "experiments"
 path = "src/lib.rs"
 
 [[bin]]

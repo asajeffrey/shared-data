@@ -1,11 +1,11 @@
 #[cfg(test)]
 use crate::harness::spawn_child;
 #[cfg(not(test))]
-use experiments::SharedAddressRange;
+use shared_data::SharedAddressRange;
 #[cfg(test)]
-use experiments::SharedBox;
+use shared_data::SharedBox;
 #[cfg(test)]
-use experiments::SharedVec;
+use shared_data::SharedVec;
 use num_derive::FromPrimitive;
 use num_derive::ToPrimitive;
 #[cfg(test)]

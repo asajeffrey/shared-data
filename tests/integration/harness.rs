@@ -1,6 +1,6 @@
 use crate::tests::ChildId;
-use experiments::SharedAddressRange;
-use experiments::ALLOCATOR;
+use shared_data::SharedAddressRange;
+use shared_data::ALLOCATOR;
 #[cfg(not(test))]
 use num_traits::FromPrimitive;
 #[cfg(test)]
@@ -42,7 +42,7 @@ pub fn spawn_child(child_id: ChildId, address: SharedAddressRange) -> Child {
 #[cfg(not(test))]
 pub fn child(shmem_path: String, child_name: String, address_name: String) {
     // Bootstrap the shared memory
-    experiments::bootstrap(shmem_path.clone());
+    shared_data::bootstrap(shmem_path.clone());
 
     // Double-check that the allocator has been configured
     // with the right path
