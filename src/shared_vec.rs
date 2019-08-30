@@ -25,7 +25,8 @@ pub struct SharedVec<T: SharedMemCast> {
 }
 
 impl<T: SharedMemCast> SharedVec<T> {
-    pub(crate) fn from_iter_in<C>(collection: C, alloc: &ShmemAllocator) -> Option<SharedVec<T>> where
+    pub(crate) fn from_iter_in<C>(collection: C, alloc: &ShmemAllocator) -> Option<SharedVec<T>>
+    where
         C: IntoIterator<Item = T>,
         C::IntoIter: ExactSizeIterator,
     {
