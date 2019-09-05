@@ -18,6 +18,9 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicUsize;
 
 use crate::allocator::ShmemMetadata;
+use crate::shared_channel::SharedChannel;
+use crate::shared_channel::SharedReceiver;
+use crate::shared_channel::SharedSender;
 use crate::shared_rc::SharedRcContents;
 use crate::AtomicSharedAddress;
 use crate::ObjectOffset;
@@ -25,6 +28,7 @@ use crate::ObjectSize;
 use crate::SharedAddress;
 use crate::SharedAddressRange;
 use crate::SharedBox;
+use crate::SharedOption;
 use crate::SharedRc;
 use crate::SharedVec;
 use crate::ShmemId;
@@ -73,9 +77,12 @@ where
 
 unsafe impl SharedMemRef for AtomicSharedAddress {}
 unsafe impl SharedMemRef for ShmemMetadata {}
-unsafe impl<T: SharedMemCast> SharedMemRef for SharedBox<T> {}
+unsafe impl<T: SharedMemCast> SharedMemRef for SharedChannel<T> {}
+unsafe impl<T: SharedMemCast> SharedMemRef for SharedOption<T> {}
 unsafe impl<T: SharedMemCast> SharedMemRef for SharedRc<T> {}
 unsafe impl<T: SharedMemCast> SharedMemRef for SharedRcContents<T> {}
+unsafe impl<T: SharedMemCast> SharedMemRef for SharedReceiver<T> {}
+unsafe impl<T: SharedMemCast> SharedMemRef for SharedSender<T> {}
 unsafe impl<T: SharedMemCast> SharedMemRef for SharedVec<T> {}
 unsafe impl<T: SharedMemCast> SharedMemRef for Volatile<T> {}
 
@@ -88,8 +95,12 @@ unsafe impl SharedMemCast for ShmemId {}
 unsafe impl SharedMemCast for ShmemMetadata {}
 unsafe impl SharedMemCast for ShmemName {}
 unsafe impl<T: SharedMemCast> SharedMemCast for SharedBox<T> {}
+unsafe impl<T: SharedMemCast> SharedMemCast for SharedChannel<T> {}
+unsafe impl<T: SharedMemCast> SharedMemCast for SharedOption<T> {}
 unsafe impl<T: SharedMemCast> SharedMemCast for SharedRc<T> {}
 unsafe impl<T: SharedMemCast> SharedMemCast for SharedRcContents<T> {}
+unsafe impl<T: SharedMemCast> SharedMemCast for SharedReceiver<T> {}
+unsafe impl<T: SharedMemCast> SharedMemCast for SharedSender<T> {}
 unsafe impl<T: SharedMemCast> SharedMemCast for SharedVec<T> {}
 unsafe impl<T: SharedMemCast> SharedMemCast for Volatile<T> {}
 
@@ -138,6 +149,11 @@ impl<T: SharedMemCast> Volatile<T> {
     /// Create a new volatile.
     pub fn new(value: T) -> Volatile<T> {
         Volatile(UnsafeCell::new(value))
+    }
+
+    /// A volatile whose byte representation is all zeros.
+    pub fn zeroed() -> Volatile<T> {
+        unsafe { mem::zeroed() }
     }
 
     /// Try to create a volatile from some volatile bytes.
