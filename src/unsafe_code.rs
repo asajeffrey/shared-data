@@ -5,8 +5,12 @@
 #![allow(unsafe_code)]
 
 use owning_ref::StableAddress;
+use shared_memory::EventSet;
+use shared_memory::EventState;
+use shared_memory::EventWait;
 use shared_memory::SharedMem;
 use shared_memory::SharedMemCast;
+use shared_memory::Timeout;
 use std::cell::UnsafeCell;
 use std::mem;
 use std::ops::Deref;
@@ -118,6 +122,28 @@ impl SyncSharedMem {
         let size = shmem.get_size();
         let result = SyncSharedMem(ptr, size, shmem);
         result
+    }
+
+    /// Set an event
+    pub fn set_event(&self, index: usize, state: EventState) {
+        // Very annoyingly, we have to do this INCREDIBLY UNSAFE cast,
+        // because set takes a &mut self, even though it never uses
+        // the fact it's &mut. It would be nice if there was a way
+        // to use events safely without locking.
+        let this = &self.2 as *const SharedMem as *mut SharedMem;
+        let this = unsafe { &mut *this };
+        let _ = this.set(index, state);
+    }
+
+    /// Wait for an event
+    pub fn wait_event(&self, index: usize, timeout: Timeout) {
+        // Very annoyingly, we have to do this INCREDIBLY UNSAFE cast,
+        // because wait takes a &mut self, even though it never uses
+        // the fact it's &mut. It would be nice if there was a way
+        // to use events safely without locking.
+        let this = &self.2 as *const SharedMem as *mut SharedMem;
+        let this = unsafe { &mut *this };
+        let _ = this.wait(index, timeout);
     }
 }
 

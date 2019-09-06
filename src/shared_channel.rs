@@ -6,7 +6,10 @@ use crate::SharedOption;
 use crate::SharedRc;
 use crate::SharedVec;
 use crate::Volatile;
+use crate::ALLOCATOR;
+use shared_memory::EventState;
 use shared_memory::SharedMemCast;
+use shared_memory::Timeout;
 use std::ops::Deref;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
@@ -52,9 +55,14 @@ impl<T: SharedMemCast> SharedSender<T> {
                     return Err(unsent);
                 }
             }
-            // TODO: signal the condition variable
+            // TODO: don't use a global condition variable!
+            ALLOCATOR.set_event(EventState::Signaled);
             return Ok(());
         }
+    }
+
+    pub fn send(&mut self, data: T) {
+        self.try_send(data).ok().expect("Sending data failed");
     }
 }
 
@@ -88,6 +96,17 @@ impl<T: SharedMemCast> SharedReceiver<T> {
         let capacity = self.0.buffer.len();
         let index = self.0.start.load(Ordering::SeqCst) % capacity;
         self.0.buffer[index].volatile_peek()
+    }
+
+    pub fn peek(&self) -> &Volatile<T> {
+        loop {
+            if let Some(result) = self.try_peek() {
+                return result;
+            } else {
+                // TODO: don't use a global condition variable!
+                ALLOCATOR.wait_event(Timeout::Infinite);
+            }
+        }
     }
 }
 
