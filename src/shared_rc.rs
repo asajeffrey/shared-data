@@ -72,8 +72,11 @@ impl<T: SharedMemCast> Clone for SharedRc<T> {
 
 impl<T: SharedMemCast> Drop for SharedRc<T> {
     fn drop(&mut self) {
-        let ref_count = self.0.ref_count.fetch_sub(1, Ordering::SeqCst);
-        if ref_count > 1 {
+        let ref_count = match self.0.try_get() {
+            Some(contents) => contents.ref_count.fetch_sub(1, Ordering::SeqCst),
+            None => return,
+        };
+        if ref_count <= 1 {
             self.0 = SharedBox::unchecked_from_address(SharedAddressRange::null())
         }
     }
