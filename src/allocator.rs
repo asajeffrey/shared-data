@@ -10,8 +10,11 @@ use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
 use owning_ref::BoxRef;
 use owning_ref::OwningRef;
-use shared_memory::LockType;
+use shared_memory::EventState;
+use shared_memory::EventType;
 use shared_memory::SharedMem;
+use shared_memory::SharedMemConf;
+use shared_memory::Timeout;
 use std::mem;
 use std::ops::Deref;
 use std::sync::atomic::AtomicBool;
@@ -83,7 +86,12 @@ impl ShmemAllocator {
 
     pub fn create() -> Option<ShmemAllocator> {
         let size = mem::size_of::<ShmemMetadata>();
-        let shmem = SharedMem::create(LockType::Mutex, size).ok()?;
+        let shmem = SharedMemConf::new()
+            .set_size(size)
+            .add_event(EventType::Auto)
+            .ok()?
+            .create()
+            .ok()?;
         let shmem_name = ShmemName::from_str(shmem.get_os_path())?;
         let shmem = SyncSharedMem::from_shmem(shmem);
         let metadata = ShmemMetadata::new(shmem_name);
@@ -146,7 +154,7 @@ impl ShmemAllocator {
     // I'd like to be able to mark this as `no_panic` but unfortunately
     // the shared memory crate can panic when creating a shared memory file.
     fn alloc_shmem(&self, size: usize) -> Option<ShmemId> {
-        let shmem = SharedMem::create(LockType::Mutex, size).ok()?;
+        let shmem = SharedMemConf::new().set_size(size).create().ok()?;
         let shmem_name = ShmemName::from_str(shmem.get_os_path())?;
         let boxed_shmem = Box::new(SyncSharedMem::from_shmem(shmem));
         let mut index = self.metadata().num_shmems.load(Ordering::Relaxed);
@@ -226,6 +234,16 @@ impl ShmemAllocator {
     #[cfg_attr(feature = "no-panic", no_panic)]
     pub fn free_bytes(&self, _addr: SharedAddressRange) {
         // TODO
+    }
+
+    pub(crate) fn set_event(&self, state: EventState) {
+        // TODO: more than one event
+        self.metadata_shmem.as_owner().set_event(0, state);
+    }
+
+    pub(crate) fn wait_event(&self, timeout: Timeout) {
+        // TODO: more than one event
+        self.metadata_shmem.as_owner().wait_event(0, timeout);
     }
 }
 
