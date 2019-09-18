@@ -5,8 +5,12 @@
 #![allow(unsafe_code)]
 
 use owning_ref::StableAddress;
+use shared_memory::EventSet;
+use shared_memory::EventState;
+use shared_memory::EventWait;
 use shared_memory::SharedMem;
 use shared_memory::SharedMemCast;
+use shared_memory::Timeout;
 use std::cell::UnsafeCell;
 use std::mem;
 use std::ops::Deref;
@@ -18,6 +22,9 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::AtomicUsize;
 
 use crate::allocator::ShmemMetadata;
+use crate::shared_channel::SharedChannel;
+use crate::shared_channel::SharedReceiver;
+use crate::shared_channel::SharedSender;
 use crate::shared_rc::SharedRcContents;
 use crate::AtomicSharedAddress;
 use crate::ObjectOffset;
@@ -25,6 +32,7 @@ use crate::ObjectSize;
 use crate::SharedAddress;
 use crate::SharedAddressRange;
 use crate::SharedBox;
+use crate::SharedOption;
 use crate::SharedRc;
 use crate::SharedVec;
 use crate::ShmemId;
@@ -73,9 +81,12 @@ where
 
 unsafe impl SharedMemRef for AtomicSharedAddress {}
 unsafe impl SharedMemRef for ShmemMetadata {}
-unsafe impl<T: SharedMemCast> SharedMemRef for SharedBox<T> {}
+unsafe impl<T: SharedMemCast> SharedMemRef for SharedChannel<T> {}
+unsafe impl<T: SharedMemCast> SharedMemRef for SharedOption<T> {}
 unsafe impl<T: SharedMemCast> SharedMemRef for SharedRc<T> {}
 unsafe impl<T: SharedMemCast> SharedMemRef for SharedRcContents<T> {}
+unsafe impl<T: SharedMemCast> SharedMemRef for SharedReceiver<T> {}
+unsafe impl<T: SharedMemCast> SharedMemRef for SharedSender<T> {}
 unsafe impl<T: SharedMemCast> SharedMemRef for SharedVec<T> {}
 unsafe impl<T: SharedMemCast> SharedMemRef for Volatile<T> {}
 
@@ -88,8 +99,12 @@ unsafe impl SharedMemCast for ShmemId {}
 unsafe impl SharedMemCast for ShmemMetadata {}
 unsafe impl SharedMemCast for ShmemName {}
 unsafe impl<T: SharedMemCast> SharedMemCast for SharedBox<T> {}
+unsafe impl<T: SharedMemCast> SharedMemCast for SharedChannel<T> {}
+unsafe impl<T: SharedMemCast> SharedMemCast for SharedOption<T> {}
 unsafe impl<T: SharedMemCast> SharedMemCast for SharedRc<T> {}
 unsafe impl<T: SharedMemCast> SharedMemCast for SharedRcContents<T> {}
+unsafe impl<T: SharedMemCast> SharedMemCast for SharedReceiver<T> {}
+unsafe impl<T: SharedMemCast> SharedMemCast for SharedSender<T> {}
 unsafe impl<T: SharedMemCast> SharedMemCast for SharedVec<T> {}
 unsafe impl<T: SharedMemCast> SharedMemCast for Volatile<T> {}
 
@@ -107,6 +122,28 @@ impl SyncSharedMem {
         let size = shmem.get_size();
         let result = SyncSharedMem(ptr, size, shmem);
         result
+    }
+
+    /// Set an event
+    pub fn set_event(&self, index: usize, state: EventState) {
+        // Very annoyingly, we have to do this INCREDIBLY UNSAFE cast,
+        // because set takes a &mut self, even though it never uses
+        // the fact it's &mut. It would be nice if there was a way
+        // to use events safely without locking.
+        let this = &self.2 as *const SharedMem as *mut SharedMem;
+        let this = unsafe { &mut *this };
+        let _ = this.set(index, state);
+    }
+
+    /// Wait for an event
+    pub fn wait_event(&self, index: usize, timeout: Timeout) {
+        // Very annoyingly, we have to do this INCREDIBLY UNSAFE cast,
+        // because wait takes a &mut self, even though it never uses
+        // the fact it's &mut. It would be nice if there was a way
+        // to use events safely without locking.
+        let this = &self.2 as *const SharedMem as *mut SharedMem;
+        let this = unsafe { &mut *this };
+        let _ = this.wait(index, timeout);
     }
 }
 
@@ -138,6 +175,11 @@ impl<T: SharedMemCast> Volatile<T> {
     /// Create a new volatile.
     pub fn new(value: T) -> Volatile<T> {
         Volatile(UnsafeCell::new(value))
+    }
+
+    /// A volatile whose byte representation is all zeros.
+    pub fn zeroed() -> Volatile<T> {
+        unsafe { mem::zeroed() }
     }
 
     /// Try to create a volatile from some volatile bytes.

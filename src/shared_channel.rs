@@ -2,109 +2,169 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-use crate::AtomicSharedAddress;
-use crate::SharedAddress;
-use crate::SharedBox;
+use crate::SharedOption;
 use crate::SharedRc;
 use crate::SharedVec;
-use crate::SharedMemRef;
+use crate::Volatile;
+use crate::ALLOCATOR;
+use log::debug;
+use shared_memory::EventState;
 use shared_memory::SharedMemCast;
-use std::iter;
-use std::mem;
-use std::sync::atomic::AtomicIsize;
+use shared_memory::Timeout;
+use std::ops::Deref;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
-// TODO: grow buffers
-const BUFFER_SIZE: usize = 256;
-
-// TODO: support enums
-const UNOCCUPIED: u8 = 0;
-const RESERVED: u8 = 1;
-const OCCUPIED: u8 = 2;
-
-struct SharedChannel<T> {
-    // TODO: once MaybeUninit has stabalized, use it
-    buffer: SharedVec<T>,
-    occupied: SharedVec<AtomicU8>,
-    start: AtomicIsize,
-    finish: AtomicIsize,
-    grown: AtomicShared<SharedRc<SharedChannel<T>>>,
-    // TODO: grow the channel
+pub(crate) struct SharedChannel<T: SharedMemCast> {
+    buffer: SharedVec<SharedOption<T>>,
+    start: AtomicUsize,
+    finish: AtomicUsize,
+    // Initially none, but set to be the channel if it grows.
+    grown: SharedOption<SharedRc<SharedChannel<T>>>,
     // TODO: condition variable
 }
 
-unsafe impl<T: SharedMemCast> SharedMemCast for SharedChannel<T> {}
-unsafe impl<T: SharedMemCast> SharedMemRef for SharedChannel<T> {}
-
 impl<T: SharedMemCast> SharedChannel<T> {
-    fn new() -> SharedChannel<T> {
-        SharedChannel {
-            buffer: SharedVec::from_iter((0..BUFFER_SIZE).map(|_| mem::uninitialized())),
-            occupied: SharedVec::from_iter((0..BUFFER_SIZE).map(|_| AtomicBool::new(false))),
-            start: AtomicIsize::new(0),
-            finish: AtomicIsize::new(0),
-            grown: AtomicShared::null(),
-	}
+    fn try_new(capacity: usize) -> Option<SharedChannel<T>> {
+        Some(SharedChannel {
+            buffer: SharedVec::try_from_iter((0..capacity).map(|_| SharedOption::none()))?,
+            start: AtomicUsize::new(0),
+            finish: AtomicUsize::new(0),
+            grown: SharedOption::none(),
+        })
     }
 }
 
-pub struct SharedSender<T> (SharedRc<SharedChannel<T>>);
-
-unsafe impl<T: SharedMemCast> SharedMemCast for SharedSender<T> {}
-unsafe impl<T: SharedMemCast> SharedMemRef for SharedSender<T> {}
+#[derive(Clone)]
+pub struct SharedSender<T: SharedMemCast>(SharedRc<SharedChannel<T>>);
 
 impl<T: SharedMemCast> SharedSender<T> {
-    pub fn send(&mut self, data: T) {
+    pub fn try_send(&mut self, mut data: T) -> Result<(), T> {
         loop {
-	    if let Some(grown) = self.0.grown.load(Ordering::SeqCst) {
-	        self.0 = grown;
-	        continue;
-	    }
-            let index = self.0.finish.fetch_add(1, Ordering::SeqCst) % BUFFER_SIZE;
-            if index == (BUFFER_SIZE - 1) {
-                // We overflowed, but the buffer is circular, so we just mod
-                self.0.finish.fetch_sub(BUFFER_SIZE, Ordering::SeqCst);
+            let capacity = self.0.buffer.len();
+            if let Some(grown) = self.0.grown.volatile_peek() {
+                debug!("Sending to grown channel");
+                self.0 = grown.deref().clone();
+                continue;
             }
-	    if UNOCCUPIED != self.occupied[index].compare_and_swap(UNOCCUPIED, RESERVED, Ordering::SeqCst) {
-	        let grown = SharedRc::new(SharedChannel::new());
-		self.0.grown.compare_and_swap(None, Some(grown), Ordering::SeqCst);
-		continue;
+            let index = self.0.finish.fetch_add(1, Ordering::SeqCst);
+            if let Err(unsent) = self.0.buffer[index % capacity].put(data) {
+                if let Some(grown) = SharedChannel::try_new(capacity * 2) {
+                    debug!("Growing channel");
+                    self.0.finish.fetch_sub(1, Ordering::SeqCst);
+                    let _ = self.0.grown.put(SharedRc::new(grown));
+                    data = unsent;
+                    continue;
+                } else {
+                    debug!("Failed to grow channel");
+                    return Err(unsent);
+                }
             }
-	    unsafe { self.0.buffer.as_ptr().offset(index).write_volatile(data) };
-	    self.occupied[index].store(OCCUPIED, Ordering::SeqCst);
-	    // TODO: signal the condition variable
-	    return;
-	}
+            // TODO: don't use a global condition variable!
+            debug!("Wake up receiver");
+            ALLOCATOR.set_event(EventState::Signaled);
+            return Ok(());
+        }
+    }
+
+    pub fn send(&mut self, data: T) {
+        self.try_send(data).ok().expect("Sending data failed");
     }
 }
 
-pub struct SharedReceiver<T> (SharedRc<SharedChannel<T>>);
-
-unsafe impl<T: SharedMemCast> SharedMemCast for SharedReceiver<T> {}
-unsafe impl<T: SharedMemCast> SharedMemRef for SharedReceiver<T> {}
+pub struct SharedReceiver<T: SharedMemCast>(SharedRc<SharedChannel<T>>);
 
 impl<T: SharedMemCast> SharedReceiver<T> {
-    pub fn try_recv(&self) -> Option<T> {
-        let index = self.0.start.fetch_add(1, Ordering::SeqCst) % BUFFER_SIZE;
-        if index == (BUFFER_SIZE - 1) {
-            // We overflowed, but the buffer is circular, so we just mod
-            self.0.start.fetch_sub(BUFFER_SIZE, Ordering::SeqCst);
+    pub fn try_recv(&mut self) -> Option<T> {
+        loop {
+            let capacity = self.0.buffer.len();
+            let index = self.0.start.fetch_add(1, Ordering::SeqCst);
+            if let Some(result) = self.0.buffer[index % capacity].take() {
+                debug!("Received data");
+                if capacity <= index {
+                    // We overflowed, but the buffer is circular, so we just mod
+                    self.0.start.fetch_sub(capacity, Ordering::SeqCst);
+                    self.0.finish.fetch_sub(capacity, Ordering::SeqCst);
+                }
+                return Some(result);
+            }
+            if let Some(grown) = self.0.grown.volatile_peek() {
+                if index == self.0.finish.load(Ordering::SeqCst) {
+                    debug!("Receiving from grown channel");
+                    self.0 = grown.deref().clone();
+                    continue;
+                }
+            }
+            self.0.start.fetch_sub(1, Ordering::SeqCst);
+            return None;
         }
-        if OCCUPIED != self.occupied[index].compare_and_swap(OCCUPIED, RESERVED, Ordering::SeqCst) {
-	    return None;
-        }
-	let result = unsafe { self.0.buffer.as_ptr().offset(index).read_volatile() };
-        self.occupied[index].store(UNOCCUPIED, Ordering::SeqCst);
-	Some(result)
     }
 
-    pub fn try_peek(&self) -> Option<&T> {
-        let index = self.0.start.load(Ordering::SeqCst) % BUFFER_SIZE;
-        if OCCUPIED != self.occupied[index].load(Ordering::SeqCst) {
-	    return None;
+    pub fn try_peek(&self) -> Option<&Volatile<T>> {
+        let mut this = &self.0;
+        loop {
+            let capacity = this.buffer.len();
+            let index = this.start.load(Ordering::SeqCst);
+            if let Some(result) = this.buffer[index % capacity].volatile_peek() {
+                debug!("Peeked data");
+                return Some(result);
+            }
+            if let Some(grown) = this.grown.volatile_peek() {
+                debug!(
+                    "capacity = {}, index = {}, finish = {}",
+                    capacity,
+                    index,
+                    this.finish.load(Ordering::SeqCst)
+                );
+                if index == this.finish.load(Ordering::SeqCst) {
+                    debug!("Peeking in grown channel");
+                    this = grown;
+                    continue;
+                }
+            }
+            return None;
         }
-	unsafe { &*self.0.buffer.as_ptr().offset(index) }
+    }
+
+    pub fn peek(&self) -> &Volatile<T> {
+        loop {
+            if let Some(result) = self.try_peek() {
+                return result;
+            } else {
+                // TODO: don't use a global condition variable!
+                debug!("Waiting for sender");
+                ALLOCATOR.wait_event(Timeout::Infinite);
+            }
+        }
     }
 }
 
+pub fn channel<T: SharedMemCast>() -> Option<(SharedSender<T>, SharedReceiver<T>)> {
+    let channel = SharedRc::try_new(SharedChannel::try_new(1)?)?;
+    Some((SharedSender(channel.clone()), SharedReceiver(channel)))
+}
+
+#[cfg(test)]
+use std::thread;
+
+#[cfg(test)]
+use std::time::Duration;
+
+#[test]
+fn test_channels() {
+    let (mut sender, mut receiver) = channel().unwrap();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(10));
+        sender.send(AtomicUsize::new(5));
+        thread::sleep(Duration::from_millis(10));
+        sender.send(AtomicUsize::new(37));
+        sender.send(AtomicUsize::new(2));
+    });
+    assert_eq!(receiver.peek().load(Ordering::SeqCst), 5);
+    assert_eq!(receiver.try_recv().unwrap().load(Ordering::SeqCst), 5);
+    assert_eq!(receiver.peek().load(Ordering::SeqCst), 37);
+    assert_eq!(receiver.try_recv().unwrap().load(Ordering::SeqCst), 37);
+    thread::sleep(Duration::from_millis(10));
+    assert_eq!(receiver.peek().load(Ordering::SeqCst), 2);
+    assert_eq!(receiver.try_recv().unwrap().load(Ordering::SeqCst), 2);
+}
