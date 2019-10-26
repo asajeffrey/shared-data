@@ -39,6 +39,10 @@ impl<T: SharedMemCast> SharedRc<T> {
     pub fn address(&self) -> SharedAddressRange {
         self.0.address()
     }
+
+    pub fn count(this: &Self) -> usize {
+        this.0.ref_count.load(Ordering::SeqCst)
+    }
 }
 
 impl<T: SharedMemCast> TryFrom<SharedAddressRange> for SharedRc<T> {
