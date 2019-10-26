@@ -36,8 +36,8 @@ impl<T: SharedMemCast> SharedRc<T> {
         SharedRc::try_new(data).expect("Failed to allocate shared Rc")
     }
 
-    pub fn address(&self) -> SharedAddressRange {
-        self.0.address()
+    pub fn address(this: &Self) -> SharedAddressRange {
+        this.0.address()
     }
 }
 
