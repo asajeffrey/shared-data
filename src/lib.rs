@@ -21,6 +21,9 @@ mod shmem_name;
 // All unsafe code lives here
 mod unsafe_code;
 
+// Reexport traits.
+pub use shared_memory::SharedMemCast;
+
 pub use allocator::get_bootstrap_name;
 pub use allocator::set_bootstrap_name;
 pub use shared_address_range::SharedAddressRange;
