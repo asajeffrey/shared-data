@@ -6,20 +6,17 @@ use arrayvec::ArrayString;
 use std::convert::AsRef;
 use std::ffi::OsStr;
 
-#[cfg(feature = "no-panic")]
-use no_panic::no_panic;
-
 #[derive(Clone, Copy, Default, Eq, Debug, PartialEq)]
 pub struct ShmemName(ArrayString<[u8; 32]>);
 
 impl ShmemName {
-    #[cfg_attr(feature = "no-panic", no_panic)]
+    // For some reason no-pqanic complains about this function
     pub fn from_str(name: &str) -> Option<Self> {
         let name = ArrayString::from(name).ok()?;
         Some(ShmemName(name))
     }
 
-    #[cfg_attr(feature = "no-panic", no_panic)]
+    // For some reason no-pqanic complains about this function
     pub fn as_str(&self) -> &str {
         self.0.as_str()
     }

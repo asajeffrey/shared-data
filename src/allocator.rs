@@ -112,7 +112,7 @@ impl ShmemAllocator {
         ShmemAllocator::from_shmem(shmem)
     }
 
-    #[cfg_attr(feature = "no-panic", no_panic)]
+    // For some reason no-pqanic complains about this function
     fn metadata(&self) -> &ShmemMetadata {
         &*self.metadata_shmem
     }
