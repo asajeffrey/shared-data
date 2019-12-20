@@ -3,6 +3,7 @@ name = "shared-data"
 version = "0.0.1"
 authors = ["Alan Jeffrey <ajeffrey@mozilla.com>"]
 edition = "2018"
+repository = "https://github.com/asajeffrey/shared-data"
 
 [lib]
 path = "src/lib.rs"
