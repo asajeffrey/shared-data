@@ -27,6 +27,7 @@ use crate::shared_channel::SharedReceiver;
 use crate::shared_channel::SharedSender;
 use crate::shared_rc::SharedRcContents;
 use crate::AtomicSharedAddress;
+use crate::AtomicSharedAddressRange;
 use crate::ObjectOffset;
 use crate::ObjectSize;
 use crate::SharedAddress;
@@ -80,6 +81,7 @@ where
 // etc
 
 unsafe impl SharedMemRef for AtomicSharedAddress {}
+unsafe impl SharedMemRef for AtomicSharedAddressRange {}
 unsafe impl SharedMemRef for ShmemMetadata {}
 unsafe impl<T: SharedMemCast> SharedMemRef for SharedChannel<T> {}
 unsafe impl<T: SharedMemCast> SharedMemRef for SharedOption<T> {}
@@ -92,9 +94,11 @@ unsafe impl<T: SharedMemCast> SharedMemRef for Volatile<T> {}
 
 // Implementations of `SharedMemCast` for types in this crate
 unsafe impl SharedMemCast for AtomicSharedAddress {}
+unsafe impl SharedMemCast for AtomicSharedAddressRange {}
 unsafe impl SharedMemCast for ObjectOffset {}
 unsafe impl SharedMemCast for ObjectSize {}
 unsafe impl SharedMemCast for SharedAddress {}
+unsafe impl SharedMemCast for SharedAddressRange {}
 unsafe impl SharedMemCast for ShmemId {}
 unsafe impl SharedMemCast for ShmemMetadata {}
 unsafe impl SharedMemCast for ShmemName {}

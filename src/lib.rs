@@ -6,6 +6,7 @@
 
 mod allocator;
 mod atomic_shared_address;
+mod atomic_shared_address_range;
 mod object_offset;
 mod object_size;
 mod shared_address;
@@ -41,6 +42,7 @@ pub use unsafe_code::Volatile;
 pub(crate) use allocator::ShmemAllocator;
 pub(crate) use allocator::ALLOCATOR;
 pub(crate) use atomic_shared_address::AtomicSharedAddress;
+pub(crate) use atomic_shared_address_range::AtomicSharedAddressRange;
 pub(crate) use object_offset::ObjectOffset;
 pub(crate) use object_size::ObjectSize;
 pub(crate) use shared_address::SharedAddress;
