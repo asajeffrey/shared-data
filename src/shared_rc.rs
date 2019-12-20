@@ -6,16 +6,18 @@ use crate::SharedAddressRange;
 use crate::SharedBox;
 use crate::SharedMemRef;
 use crate::Volatile;
+use log::debug;
 use shared_memory::SharedMemCast;
 use std::convert::From;
 use std::convert::TryFrom;
 use std::mem;
+use std::mem::ManuallyDrop;
 use std::ops::Deref;
 use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering;
 
 /// An reference counted pointer into shared memory.
-pub struct SharedRc<T: SharedMemCast>(SharedBox<SharedRcContents<T>>);
+pub struct SharedRc<T: SharedMemCast>(ManuallyDrop<SharedBox<SharedRcContents<T>>>);
 
 // This is repr(C) to ensure that the data is placed at the beginning
 #[repr(C)]
@@ -29,7 +31,9 @@ impl<T: SharedMemCast> SharedRc<T> {
         let ref_count = AtomicUsize::new(1);
         let data = Volatile::new(data);
         let contents = SharedRcContents { ref_count, data };
-        Some(SharedRc(SharedBox::new(contents)))
+        let boxed = SharedBox::try_new(contents)?;
+        debug!("Using box as Rc");
+        Some(SharedRc(ManuallyDrop::new(boxed)))
     }
 
     pub fn new(data: T) -> SharedRc<T> {
@@ -48,7 +52,7 @@ impl<T: SharedMemCast> SharedRc<T> {
 impl<T: SharedMemCast> TryFrom<SharedAddressRange> for SharedRc<T> {
     type Error = ();
     fn try_from(address: SharedAddressRange) -> Result<SharedRc<T>, ()> {
-        Ok(SharedRc(SharedBox::try_from(address)?))
+        Ok(SharedRc(ManuallyDrop::new(SharedBox::try_from(address)?)))
     }
 }
 
@@ -70,7 +74,9 @@ impl<T: SharedMemCast + SharedMemRef> Deref for SharedRc<T> {
 impl<T: SharedMemCast> Clone for SharedRc<T> {
     fn clone(&self) -> Self {
         self.0.ref_count.fetch_add(1, Ordering::SeqCst);
-        SharedRc(SharedBox::unchecked_from_address(self.0.address()))
+        SharedRc(ManuallyDrop::new(SharedBox::unchecked_from_address(
+            self.0.address(),
+        )))
     }
 }
 
@@ -81,7 +87,13 @@ impl<T: SharedMemCast> Drop for SharedRc<T> {
             None => return,
         };
         if ref_count <= 1 {
-            self.0 = SharedBox::unchecked_from_address(SharedAddressRange::null())
+            debug!("Dropping rc");
+            mem::replace(
+                &mut self.0,
+                ManuallyDrop::new(SharedBox::unchecked_from_address(SharedAddressRange::null())),
+            );
+        } else {
+            debug!("Not dropping rc (refcount is now {})", ref_count - 1);
         }
     }
 }
