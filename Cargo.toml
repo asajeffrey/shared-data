@@ -20,7 +20,7 @@ path = "tests/integration/mod.rs"
 ipc = ["ipc-channel", "serde"]
 
 [dependencies]
-array-macro = "0.1"
+array-macro = "1.0.4"
 atom = "0.3"
 owning_ref = "0.4"
 shared_memory = "0.8"
