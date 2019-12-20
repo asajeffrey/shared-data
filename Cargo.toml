@@ -5,6 +5,7 @@ authors = ["Alan Jeffrey <ajeffrey@mozilla.com>"]
 edition = "2018"
 repository = "https://github.com/asajeffrey/shared-data"
 license = "MPL-2"
+description = "A library for data structures living in shared memory."
 
 [lib]
 path = "src/lib.rs"
