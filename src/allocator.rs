@@ -23,6 +23,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Mutex;
 
 use crate::AtomicSharedAddress;
+use crate::AtomicSharedAddressRange;
 use crate::ObjectOffset;
 use crate::ObjectSize;
 use crate::SharedAddress;
@@ -41,13 +42,17 @@ use no_panic::no_panic;
 const MAX_SHMEMS: usize = 64;
 const MIN_OBJECT_SIZE: usize = 8;
 
+// Object sizes are represented using a u8 (byte n represents size 2^n)
+// so there are at most 256 of them.
+const NUM_OBJECT_SIZES: usize = 256;
+
 pub(crate) struct ShmemMetadata {
     name: Volatile<ShmemName>,
     num_shmems: AtomicUsize,
     shmem_used: [AtomicBool; MAX_SHMEMS],
     shmem_names: [Volatile<ShmemName>; MAX_SHMEMS],
     unused: AtomicSharedAddress,
-    // TODO: add free lists
+    free_lists: [AtomicSharedAddressRange; NUM_OBJECT_SIZES],
 }
 
 impl ShmemMetadata {
@@ -58,6 +63,7 @@ impl ShmemMetadata {
             shmem_used: array![AtomicBool::new(false); MAX_SHMEMS],
             shmem_names: array![Volatile::new(ShmemName::default()); MAX_SHMEMS],
             unused: AtomicSharedAddress::default(),
+            free_lists: array![AtomicSharedAddressRange::default(); NUM_OBJECT_SIZES],
         }
     }
 }
@@ -204,11 +210,16 @@ impl ShmemAllocator {
     pub fn alloc_bytes(&self, size: usize) -> Option<SharedAddressRange> {
         let object_size = ObjectSize::ceil(usize::max(MIN_OBJECT_SIZE, size));
         loop {
+            if let Some(result) = self.unfree_bytes(object_size) {
+                debug!("Unfreed {:?}", result);
+                return Some(result);
+            }
             if let Some(result) = self
                 .metadata()
                 .unused
                 .fetch_add(object_size, Ordering::SeqCst)
             {
+                debug!("Allocated {:?}", result);
                 return Some(result);
             }
             let old_unused = self.metadata().unused.load(Ordering::SeqCst);
@@ -232,8 +243,35 @@ impl ShmemAllocator {
     }
 
     #[cfg_attr(feature = "no-panic", no_panic)]
-    pub fn free_bytes(&self, _addr: SharedAddressRange) {
-        // TODO
+    fn unfree_bytes(&self, object_size: ObjectSize) -> Option<SharedAddressRange> {
+        let free_list = &self.metadata().free_lists[object_size.0 as usize];
+        loop {
+            let head = free_list.load(Ordering::SeqCst);
+            if head == SharedAddressRange::null() {
+                return None;
+            }
+            let bytes = self.get_bytes(head)?;
+            let tail: &AtomicSharedAddressRange = Volatile::from_volatile_bytes(bytes)?;
+            let tail: SharedAddressRange = tail.load(Ordering::SeqCst);
+            if head == free_list.compare_and_swap(head, tail, Ordering::SeqCst) {
+                return Some(head);
+            }
+        }
+    }
+
+    #[cfg_attr(feature = "no-panic", no_panic)]
+    pub fn free_bytes(&self, addr: SharedAddressRange) -> Option<()> {
+        let free_list = &self.metadata().free_lists[addr.object_size().0 as usize];
+        let bytes = self.get_bytes(addr)?;
+        loop {
+            let head: &AtomicSharedAddressRange = Volatile::from_volatile_bytes(bytes)?;
+            let tail = free_list.load(Ordering::SeqCst);
+            head.store(tail, Ordering::SeqCst);
+            if tail == free_list.compare_and_swap(tail, addr, Ordering::SeqCst) {
+                debug!("Freed {:?}", addr);
+                return Some(());
+            }
+        }
     }
 
     pub(crate) fn set_event(&self, state: EventState) {
