@@ -113,7 +113,14 @@ impl<T: SharedMemCast + SharedMemRef> Deref for SharedVec<T> {
 
 impl<T: SharedMemCast> Drop for SharedVec<T> {
     fn drop(&mut self) {
-        // TODO
+        debug!("Dropping vector {:?}", self.address);
+        // TODO: make it possible to use drop_in_place
+        if let Some(volatiles) = self.try_get() {
+            for volatile in volatiles {
+                volatile.read_volatile();
+            }
+        }
+        ALLOCATOR.free_bytes(self.address);
     }
 }
 
